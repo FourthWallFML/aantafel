@@ -70,6 +70,7 @@ export interface Ingredient {
   amount: string;
   unit: string;
   preparation?: string;
+  optional?: boolean;
   storageCategory: StorageCategory;
 }
 
@@ -100,6 +101,7 @@ export interface Recipe {
   videoLocalId: string;
   ingredients: Ingredient[];
   steps: string[];
+  optionalStepIndices?: number[];
   notes: string;
   createdAtMs: number;
   updatedAtMs: number;
@@ -187,6 +189,7 @@ export interface SharedRecipeSnapshot {
   coverImage: string;
   ingredients: Ingredient[];
   steps: string[];
+  optionalStepIndices?: number[];
   notes: string;
 }
 

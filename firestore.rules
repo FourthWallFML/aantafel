@@ -104,12 +104,13 @@ service cloud.firestore {
     function isValidIngredientItem(item) {
       return item is map
         && item.keys().hasAll(['id', 'name', 'amount', 'unit', 'storageCategory'])
-        && item.keys().hasOnly(['id', 'name', 'amount', 'unit', 'storageCategory', 'preparation'])
+        && item.keys().hasOnly(['id', 'name', 'amount', 'unit', 'storageCategory', 'preparation', 'optional'])
         && item.id is string && item.id.size() >= 1 && item.id.size() <= 64
         && item.name is string && item.name.size() >= 1 && item.name.size() <= 150
         && (item.amount is number || (item.amount is string && item.amount.size() <= 40))
         && item.unit is string && item.unit.size() <= 40
         && (!('preparation' in item) || (item.preparation is string && item.preparation.size() <= 160))
+        && (!('optional' in item) || item.optional is bool)
         && item.storageCategory in ['vers', 'proviandkast', 'diepvries', 'bakkerij'];
     }
 
@@ -123,7 +124,7 @@ service cloud.firestore {
         && item.keys().hasOnly([
           'id', 'title', 'subtitle', 'story', 'category',
           'prepMinutes', 'cookMinutes', 'servings', 'authorName',
-          'coverImage', 'ingredients', 'steps', 'notes'
+          'coverImage', 'ingredients', 'steps', 'optionalStepIndices', 'notes'
         ])
         && isValidId(item.id)
         && item.title is string && item.title.size() >= 1 && item.title.size() <= 140
@@ -139,6 +140,7 @@ service cloud.firestore {
         && (item.ingredients.size() == 0 || isValidIngredientItem(item.ingredients[0]))
         && item.steps is list && item.steps.size() <= 40
         && (item.steps.size() == 0 || (item.steps[0] is string && item.steps[0].size() >= 1 && item.steps[0].size() <= 1500))
+        && (!('optionalStepIndices' in item) || (item.optionalStepIndices is list && item.optionalStepIndices.size() <= 40 && (item.optionalStepIndices.size() == 0 || (item.optionalStepIndices[0] is number && item.optionalStepIndices[0] >= 0 && item.optionalStepIndices[0] < 40))))
         && item.notes is string && item.notes.size() <= 2000;
     }
 
@@ -183,7 +185,7 @@ service cloud.firestore {
           'ownerId', 'title', 'subtitle', 'story', 'category',
           'prepMinutes', 'cookMinutes', 'servings', 'authorName',
           'coverImage', 'extraImages', 'videoUrl', 'videoTitle', 'videoLocalId',
-          'ingredients', 'steps', 'notes', 'createdAt', 'updatedAt'
+          'ingredients', 'steps', 'optionalStepIndices', 'notes', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
         && (data.ownerId == request.auth.uid || isAdmin())
@@ -205,6 +207,7 @@ service cloud.firestore {
         && (data.ingredients.size() == 0 || isValidIngredientItem(data.ingredients[0]))
         && data.steps is list && data.steps.size() <= 40
         && (data.steps.size() == 0 || (data.steps[0] is string && data.steps[0].size() >= 1 && data.steps[0].size() <= 1500))
+        && (!('optionalStepIndices' in data) || (data.optionalStepIndices is list && data.optionalStepIndices.size() <= 40 && (data.optionalStepIndices.size() == 0 || (data.optionalStepIndices[0] is number && data.optionalStepIndices[0] >= 0 && data.optionalStepIndices[0] < 40))))
         && data.notes is string && data.notes.size() <= 2000
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -453,7 +456,7 @@ service cloud.firestore {
             'title', 'subtitle', 'story', 'category',
             'prepMinutes', 'cookMinutes', 'servings', 'authorName',
             'coverImage', 'extraImages', 'videoUrl', 'videoTitle', 'videoLocalId',
-            'ingredients', 'steps', 'notes', 'updatedAt'
+            'ingredients', 'steps', 'optionalStepIndices', 'notes', 'updatedAt'
           ])
         );
 

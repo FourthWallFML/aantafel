@@ -343,7 +343,7 @@ export function ShoppingListView({
   };
 
   const handleCopyCompactText = async () => {
-    const lines: string[] = ['BOODSCHAPPENLIJST — TAFELBOEK', ''];
+    const lines: string[] = ['BOODSCHAPPENLIJST — AAN TAFEL!', ''];
 
     const addSection = (header: string, entries: string[]) => {
       if (entries.length === 0) return;

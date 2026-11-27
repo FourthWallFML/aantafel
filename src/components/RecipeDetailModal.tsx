@@ -17,6 +17,11 @@ import { Recipe, RecipeComment, STORAGE_CATEGORY_META } from '../types';
 import { scaleAmountString } from '../utils/ingredientCategorizer';
 import { getLocalVideoUrl, parseVideoUrl } from '../utils/mediaStorage';
 import { generateCookbookPdf } from '../utils/pdfCookbook';
+import {
+  formatIngredientParts,
+  isStepOptional,
+  splitFirstSentence,
+} from '../utils/recipeFormatting';
 import { RecipeImage } from './RecipeImage';
 
 interface RecipeDetailModalProps {
@@ -282,13 +287,11 @@ export function RecipeDetailModal({
                     </div>
                   </div>
 
-                  {/* Borderless Hanging-Indent Ingredients: **<hoeveelheid> <ingrediënt>,** <voorbereiding> */}
+                  {/* Borderless Hanging-Indent Ingredients: **<hoeveelheid> <ingrediënt>,** <voorbereiding> — optional in (...) */}
                   <ul className="space-y-2 text-[13.5px] leading-[1.45]">
                     {recipe.ingredients.map((ing) => {
                       const scaled = scaleAmountString(ing.amount, ratio);
-                      const qty = [scaled, ing.unit].filter(Boolean).join(' ');
-                      const prep = (ing.preparation || '').trim();
-                      const boldBase = [qty, ing.name.trim()].filter(Boolean).join(' ');
+                      const { boldPart, prepPart, optional } = formatIngredientParts(ing, scaled);
                       const catMeta = STORAGE_CATEGORY_META[ing.storageCategory];
 
                       return (
@@ -297,13 +300,12 @@ export function RecipeDetailModal({
                           className="flex items-baseline justify-between gap-2"
                         >
                           <div className="pl-3 -indent-3 min-w-0">
-                            <span className="font-bold text-[#121212]">
-                              {boldBase}
-                              {prep ? ',' : ''}
-                            </span>
-                            {prep && (
-                              <span className="font-normal text-zinc-700"> {prep}</span>
+                            {optional && <span className="font-normal text-zinc-700">(</span>}
+                            <span className="font-bold text-[#121212]">{boldPart}</span>
+                            {prepPart && (
+                              <span className="font-normal text-zinc-700"> {prepPart}</span>
                             )}
+                            {optional && <span className="font-normal text-zinc-700">)</span>}
                           </div>
                           <span
                             className={`text-[10px] font-medium uppercase tracking-[0.04em] opacity-75 whitespace-nowrap shrink-0 ${catMeta.accentText}`}
@@ -317,28 +319,36 @@ export function RecipeDetailModal({
                   </ul>
                 </div>
 
-                {/* Right Wider Column: Strictly Italic Intro + Inline Bold Steps + Bottom Photo Reference */}
+                {/* Right Wider Column: Strictly Italic History/Intro + Bold First-Sentence Steps + Bottom Photo Reference */}
                 <div className="lg:col-span-8 space-y-6 text-[15px] leading-[1.7] text-[#121212]">
-                  {/* Strictly Italic Intro (subtitle + story) */}
+                  {/* Strictly Italic Intro & Dish History */}
                   {(recipe.subtitle || recipe.story) && (
                     <div className="italic text-[#18181B] space-y-3">
-                      {recipe.subtitle && <p>{recipe.subtitle}</p>}
+                      {recipe.subtitle && <p className="italic">{recipe.subtitle}</p>}
                       {recipe.story && (
-                        <p className="whitespace-pre-line">{recipe.story}</p>
+                        <p className="italic whitespace-pre-line">{recipe.story}</p>
                       )}
                     </div>
                   )}
 
-                  {/* Inline Bold Numbered Preparation Steps */}
+                  {/* Numbered Preparation Steps: Bold first sentence, optional steps in (...) */}
                   <ol className="space-y-4">
-                    {recipe.steps.map((step, index) => (
-                      <li key={index}>
-                        <strong className="font-bold text-[#121212] mr-1.5">
-                          {index + 1}.
-                        </strong>
-                        <span>{step}</span>
-                      </li>
-                    ))}
+                    {recipe.steps.map((step, index) => {
+                      const { firstSentence, rest } = splitFirstSentence(step);
+                      const optional = isStepOptional(recipe.optionalStepIndices, index);
+
+                      return (
+                        <li key={index}>
+                          <strong className="font-bold text-[#121212] mr-1.5">
+                            {index + 1}.
+                          </strong>
+                          {optional && <span>(</span>}
+                          <strong className="font-bold text-[#121212]">{firstSentence}</strong>
+                          {rest && <span> {rest}</span>}
+                          {optional && <span>)</span>}
+                        </li>
+                      );
+                    })}
                   </ol>
 
                   {/* Italic Kooktip / Notes */}

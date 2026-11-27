@@ -15,6 +15,11 @@ import {
   UserProfile,
 } from '../types';
 import { buildAlphabeticalRegister, generateCookbookPdf } from '../utils/pdfCookbook';
+import {
+  formatIngredientParts,
+  isStepOptional,
+  splitFirstSentence,
+} from '../utils/recipeFormatting';
 import { RecipeImage } from './RecipeImage';
 
 interface PdfCookbookStudioProps {
@@ -232,6 +237,15 @@ export function PdfCookbookStudio({
     previewPagination.records[
       Math.min(previewRecipeIndex, Math.max(0, previewPagination.records.length - 1))
     ];
+  const previewTextLoad = activeRecord
+    ? (activeRecord.recipe.subtitle?.length || 0) +
+      (activeRecord.recipe.story?.length || 0) +
+      (activeRecord.recipe.notes?.length || 0) +
+      activeRecord.recipe.steps.reduce((acc, s) => acc + s.length + 45, 0)
+    : 0;
+  const previewIngCount = activeRecord ? activeRecord.recipe.ingredients.length : 0;
+  const isVeryDensePreview = previewTextLoad > 1250 || previewIngCount > 13;
+  const isDensePreview = !isVeryDensePreview && (previewTextLoad > 780 || previewIngCount > 9);
   const logoFullSrc = `${import.meta.env.BASE_URL}logo-aantafel.png`;
   const showCustomCoverTitle =
     title.trim().length > 0 &&
@@ -247,7 +261,7 @@ export function PdfCookbookStudio({
             Afdrukbaar PDF-kookboek
           </h1>
           <p className="text-sm sm:text-base text-zinc-600 max-w-2xl">
-            Strakke boekopmaak met aparte grote fotopagina tegenover elk recept, borderless ingrediëntenkolom, schuingedrukte inleiding, Inhoudsopgave en 3-koloms alfabetisch Register.
+            Strakke A4-boekopmaak: elk recept past netjes op één A4-pagina met vetgedrukte eerste stapzinnen, cursieve geschiedenis, optionele onderdelen tussen haakjes, aparte fotopagina, Inhoud en Register.
           </p>
         </div>
 
@@ -565,21 +579,25 @@ export function PdfCookbookStudio({
                     : 'max-w-[540px] grid-cols-1'
                 }`}
               >
-                {/* LEFT PAGE: Recipe Text Sheet */}
-                <div className="bg-white border border-zinc-200 shadow-sm p-6 sm:p-8 flex flex-col justify-between min-h-[560px] font-sans text-[#121212]">
-                  <div className="space-y-5">
+                {/* LEFT PAGE: Compact Single-A4 Recipe Text Sheet */}
+                <div className="bg-white border border-zinc-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between aspect-[210/297] overflow-y-auto font-sans text-[#121212]">
+                  <div className={isVeryDensePreview ? 'space-y-2' : 'space-y-3'}>
                     {/* Top-left uppercase chapter kicker */}
-                    <p className="text-[9px] tracking-[0.08em] text-zinc-600 uppercase">
+                    <p className="text-[8px] tracking-[0.08em] text-zinc-600 uppercase">
                       {activeRecord.recipe.category}
                     </p>
 
                     {/* Bold clean sans-serif title */}
-                    <h3 className="text-xl sm:text-[22px] font-bold tracking-tight text-[#121212] leading-snug pt-1">
+                    <h3
+                      className={`font-bold tracking-tight text-[#121212] leading-tight ${
+                        isVeryDensePreview ? 'text-base sm:text-[17px]' : 'text-lg sm:text-[19px]'
+                      }`}
+                    >
                       {activeRecord.recipe.title}
                     </h3>
 
                     {includePhotos && !photoOnOppositePage && activeRecord.recipe.coverImage && (
-                      <div className="aspect-[16/8] w-full overflow-hidden">
+                      <div className="aspect-[16/7] w-full overflow-hidden">
                         <RecipeImage
                           src={activeRecord.recipe.coverImage}
                           alt={activeRecord.recipe.title}
@@ -589,10 +607,18 @@ export function PdfCookbookStudio({
                     )}
 
                     {/* Single razor-thin horizontal rule */}
-                    <div className="border-t border-zinc-300 pt-5 grid grid-cols-12 gap-5 items-start">
+                    <div
+                      className={`border-t border-zinc-300 grid grid-cols-12 items-start ${
+                        isVeryDensePreview ? 'pt-2.5 gap-3' : 'pt-3.5 gap-4'
+                      }`}
+                    >
                       {/* Left narrow borderless column: Timings + Bold hanging-indent ingredients */}
-                      <div className="col-span-4 space-y-4">
-                        <div className="space-y-0.5 text-[9.5px] leading-tight">
+                      <div className={`col-span-4 ${isVeryDensePreview ? 'space-y-1.5' : 'space-y-2.5'}`}>
+                        <div
+                          className={`space-y-0.5 leading-tight ${
+                            isVeryDensePreview ? 'text-[7.5px]' : 'text-[8.5px]'
+                          }`}
+                        >
                           <p className="font-bold text-[#121212]">
                             Voor {activeRecord.recipe.servings}{' '}
                             {activeRecord.recipe.servings === 1 ? 'persoon' : 'personen'}
@@ -605,55 +631,83 @@ export function PdfCookbookStudio({
                           </p>
                         </div>
 
-                        <ul className="space-y-1.5 text-[9px] leading-[1.38]">
+                        <ul
+                          className={`${
+                            isVeryDensePreview
+                              ? 'space-y-0.5 text-[7px] leading-[1.25]'
+                              : isDensePreview
+                              ? 'space-y-0.5 text-[7.5px] leading-[1.28]'
+                              : 'space-y-1 text-[8px] leading-[1.32]'
+                          }`}
+                        >
                           {activeRecord.recipe.ingredients.map((ing) => {
-                            const qty = [ing.amount, ing.unit].filter(Boolean).join(' ');
-                            const prep = (ing.preparation || '').trim();
-                            const boldBase = [qty, ing.name.trim()].filter(Boolean).join(' ');
+                            const { boldPart, prepPart, optional } = formatIngredientParts(ing);
                             return (
                               <li key={ing.id} className="pl-2 -indent-2">
-                                <span className="font-bold text-[#121212]">
-                                  {boldBase}
-                                  {prep ? ',' : ''}
-                                </span>
-                                {prep && (
-                                  <span className="font-normal text-zinc-700"> {prep}</span>
+                                {optional && <span className="font-normal text-zinc-700">(</span>}
+                                <span className="font-bold text-[#121212]">{boldPart}</span>
+                                {prepPart && (
+                                  <span className="font-normal text-zinc-700"> {prepPart}</span>
                                 )}
+                                {optional && <span className="font-normal text-zinc-700">)</span>}
                               </li>
                             );
                           })}
                         </ul>
                       </div>
 
-                      {/* Right wider column: Strictly italic intro + Inline bold numbered steps + Photo ref */}
-                      <div className="col-span-8 space-y-4 text-[10px] leading-[1.58] text-[#121212]">
+                      {/* Right wider column: Strictly italic history/intro + Bold first-sentence steps + Photo ref */}
+                      <div
+                        className={`col-span-8 text-[#121212] ${
+                          isVeryDensePreview
+                            ? 'space-y-1.5 text-[7.4px] leading-[1.34]'
+                            : isDensePreview
+                            ? 'space-y-2 text-[8px] leading-[1.38]'
+                            : 'space-y-2.5 text-[8.8px] leading-[1.45]'
+                        }`}
+                      >
                         {(activeRecord.recipe.subtitle || activeRecord.recipe.story) && (
-                          <div className="italic space-y-2.5 text-[#18181B]">
-                            {activeRecord.recipe.subtitle && <p>{activeRecord.recipe.subtitle}</p>}
-                            {activeRecord.recipe.story && <p>{activeRecord.recipe.story}</p>}
+                          <div className="italic space-y-1 text-[#18181B]">
+                            {activeRecord.recipe.subtitle && (
+                              <p className="italic">{activeRecord.recipe.subtitle}</p>
+                            )}
+                            {activeRecord.recipe.story && (
+                              <p className="italic">{activeRecord.recipe.story}</p>
+                            )}
                           </div>
                         )}
 
-                        <ol className="space-y-3">
-                          {activeRecord.recipe.steps.map((step, i) => (
-                            <li key={i}>
-                              <strong className="font-bold">{i + 1}.</strong> {step}
-                            </li>
-                          ))}
+                        <ol className={isVeryDensePreview ? 'space-y-1' : isDensePreview ? 'space-y-1.5' : 'space-y-2'}>
+                          {activeRecord.recipe.steps.map((step, i) => {
+                            const { firstSentence, rest } = splitFirstSentence(step);
+                            const optional = isStepOptional(
+                              activeRecord.recipe.optionalStepIndices,
+                              i
+                            );
+                            return (
+                              <li key={i}>
+                                <strong className="font-bold">{i + 1}.</strong>{' '}
+                                {optional && <span>(</span>}
+                                <strong className="font-bold">{firstSentence}</strong>
+                                {rest && <span> {rest}</span>}
+                                {optional && <span>)</span>}
+                              </li>
+                            );
+                          })}
                         </ol>
 
                         {activeRecord.recipe.notes && (
-                          <p className="italic text-[9.5px] text-zinc-700 pt-1">
+                          <p className="italic text-[7.8px] text-zinc-700 pt-0.5">
                             {activeRecord.recipe.notes}
                           </p>
                         )}
 
                         {includeComments &&
                           (commentsByRecipe[activeRecord.recipe.id] || []).length > 0 && (
-                            <div className="pt-2 space-y-1">
-                              <div className="w-8 border-t border-zinc-300 mb-2" />
+                            <div className="pt-1 space-y-0.5">
+                              <div className="w-7 border-t border-zinc-300 mb-1" />
                               {(commentsByRecipe[activeRecord.recipe.id] || []).map((c) => (
-                                <p key={c.id} className="italic text-[9.5px] text-zinc-600">
+                                <p key={c.id} className="italic text-[7.6px] text-zinc-600">
                                   {c.text} — {c.authorName}
                                 </p>
                               ))}
@@ -661,9 +715,9 @@ export function PdfCookbookStudio({
                           )}
 
                         {activeRecord.photoRefLabel && (
-                          <div className="pt-3">
-                            <div className="w-7 border-t border-zinc-300 mb-2" />
-                            <p className="italic text-[9px] text-zinc-600 tabular-nums">
+                          <div className="pt-1">
+                            <div className="w-6 border-t border-zinc-300 mb-1" />
+                            <p className="italic text-[7.6px] text-zinc-600 tabular-nums">
                               {activeRecord.photoRefLabel}
                             </p>
                           </div>
@@ -673,14 +727,14 @@ export function PdfCookbookStudio({
                   </div>
 
                   {/* Bottom-left page number */}
-                  <div className="pt-6 text-[9.5px] text-[#121212] tabular-nums">
+                  <div className="pt-2.5 text-[8.5px] text-[#121212] tabular-nums">
                     {activeRecord.page}
                   </div>
                 </div>
 
                 {/* RIGHT PAGE: Full-Page Photograph Plate (Exact match to Reference Photo 2) */}
                 {includePhotos && photoOnOppositePage && activeRecord.recipe.coverImage && (
-                  <div className="bg-white border border-zinc-200 shadow-sm p-6 sm:p-8 flex flex-col justify-between min-h-[560px] font-sans">
+                  <div className="bg-white border border-zinc-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between aspect-[210/297] font-sans">
                     <p className="text-[9px] tracking-[0.08em] text-zinc-600 uppercase text-right mb-3">
                       {activeRecord.recipe.category}
                     </p>

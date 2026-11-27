@@ -32,6 +32,20 @@ interface RecipeEditorModalProps {
   onSave: (data: RecipeFormData, existingId?: string) => Promise<void>;
 }
 
+interface EditableStep {
+  id: string;
+  text: string;
+  optional: boolean;
+}
+
+function makeStep(text = '', optional = false): EditableStep {
+  return {
+    id: `step_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    text,
+    optional,
+  };
+}
+
 function makeIngredient(overrides?: Partial<Ingredient>): Ingredient {
   return {
     id: `ing_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -39,6 +53,7 @@ function makeIngredient(overrides?: Partial<Ingredient>): Ingredient {
     amount: '',
     unit: '',
     preparation: '',
+    optional: false,
     storageCategory: 'vers',
     ...overrides,
   };
@@ -76,9 +91,12 @@ export function RecipeEditorModal({
       : [makeIngredient(), makeIngredient(), makeIngredient()]
   );
   const [manualCategoryTouched, setManualCategoryTouched] = useState<Record<string, boolean>>({});
-  const [steps, setSteps] = useState<string[]>(
-    initialRecipe?.steps && initialRecipe.steps.length > 0 ? initialRecipe.steps : ['', '']
-  );
+  const [steps, setSteps] = useState<EditableStep[]>(() => {
+    const rawSteps =
+      initialRecipe?.steps && initialRecipe.steps.length > 0 ? initialRecipe.steps : ['', ''];
+    const optSet = new Set(initialRecipe?.optionalStepIndices || []);
+    return rawSteps.map((text, idx) => makeStep(text, optSet.has(idx)));
+  });
   const [notes, setNotes] = useState(initialRecipe?.notes || '');
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -210,13 +228,18 @@ export function RecipeEditorModal({
         amount: i.amount.trim().slice(0, 40),
         unit: i.unit.trim().slice(0, 40),
         preparation: (i.preparation || '').trim().slice(0, 160),
+        optional: Boolean(i.optional),
         storageCategory: i.storageCategory,
       }));
 
-    const cleanSteps = steps
-      .map((s) => s.trim().slice(0, 1500))
-      .filter((s) => s.length > 0)
+    const nonEmptySteps = steps
+      .map((s) => ({ text: s.text.trim().slice(0, 1500), optional: Boolean(s.optional) }))
+      .filter((s) => s.text.length > 0)
       .slice(0, 40);
+    const cleanSteps = nonEmptySteps.map((s) => s.text);
+    const cleanOptionalStepIndices = nonEmptySteps
+      .map((s, idx) => (s.optional ? idx : -1))
+      .filter((idx) => idx >= 0);
 
     const payload: RecipeFormData = {
       title: cleanTitle,
@@ -234,6 +257,7 @@ export function RecipeEditorModal({
       videoLocalId: videoLocalId.slice(0, 128),
       ingredients: cleanIngredients,
       steps: cleanSteps,
+      optionalStepIndices: cleanOptionalStepIndices,
       notes: notes.trim().slice(0, 2000),
     };
 
@@ -538,7 +562,7 @@ export function RecipeEditorModal({
 
                 <div className="sm:col-span-2">
                   <label htmlFor="rec-story" className="block text-xs font-medium text-zinc-700 mb-1">
-                    Verhaal achter het recept (voor in het kookboek)
+                    Geschiedenis / verhaal achter het gerecht (wordt cursief weergegeven)
                   </label>
                   <textarea
                     id="rec-story"
@@ -547,7 +571,7 @@ export function RecipeEditorModal({
                     value={story}
                     onChange={(e) => setStory(e.target.value)}
                     placeholder="Waar komt dit gerecht vandaan? Wanneer maken jullie het meestal?"
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14532D]/20 focus:border-[#14532D]"
+                    className="w-full px-3.5 py-2.5 text-sm italic bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14532D]/20 focus:border-[#14532D]"
                   />
                 </div>
               </div>
@@ -560,19 +584,23 @@ export function RecipeEditorModal({
                   03. Ingrediënten, voorbereiding &amp; opslagcategorie
                 </h3>
                 <span className="text-xs text-zinc-500">
-                  Opmaak in recept &amp; PDF:{' '}
+                  Opmaak:{' '}
                   <strong className="font-bold text-zinc-900">3 stuks Grote uien,</strong>{' '}
-                  <span className="font-normal text-zinc-700">grof gesneden</span>
+                  <span className="font-normal text-zinc-700">grof gesneden</span> · optioneel verschijnt{' '}
+                  <span className="text-zinc-700">(tussen haakjes)</span>
                 </span>
               </div>
 
               {/* Column headers on desktop */}
-              <div className="hidden md:grid md:grid-cols-[72px_84px_1.1fr_1.35fr_104px_32px] gap-2 px-0.5 text-[11px] font-medium uppercase tracking-[0.06em] text-zinc-500">
+              <div className="hidden md:grid md:grid-cols-[64px_76px_1.05fr_1.25fr_94px_54px_30px] gap-2 px-0.5 text-[11px] font-medium uppercase tracking-[0.06em] text-zinc-500">
                 <span>Hoev.</span>
                 <span>Eenheid</span>
                 <span>Ingrediënt</span>
                 <span>Voorbereiding (vrije tekst)</span>
                 <span>Categorie</span>
+                <span className="text-center" title="Optioneel ingrediënt verschijnt tussen haakjes">
+                  Opt.
+                </span>
                 <span />
               </div>
 
@@ -580,7 +608,9 @@ export function RecipeEditorModal({
                 {ingredients.map((ing) => (
                   <div
                     key={ing.id}
-                    className="grid grid-cols-12 md:grid-cols-[72px_84px_1.1fr_1.35fr_104px_32px] gap-2 items-center"
+                    className={`grid grid-cols-12 md:grid-cols-[64px_76px_1.05fr_1.25fr_94px_54px_30px] gap-2 items-center rounded-lg ${
+                      ing.optional ? 'bg-zinc-50/90 p-1.5 -mx-1.5 border border-dashed border-zinc-200' : ''
+                    }`}
                   >
                     <input
                       type="text"
@@ -628,7 +658,7 @@ export function RecipeEditorModal({
                         )
                       }
                       aria-label="Opslagcategorie"
-                      className="col-span-10 md:col-span-1 px-2.5 py-2 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
+                      className="col-span-6 md:col-span-1 px-2 py-2 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
                     >
                       {(Object.keys(STORAGE_CATEGORY_META) as StorageCategory[]).map((key) => (
                         <option key={key} value={key}>
@@ -636,6 +666,19 @@ export function RecipeEditorModal({
                         </option>
                       ))}
                     </select>
+                    <label
+                      className="col-span-4 md:col-span-1 flex items-center md:justify-center gap-1.5 text-xs text-zinc-600 cursor-pointer select-none"
+                      title="Optioneel ingrediënt (verschijnt tussen haakjes)"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(ing.optional)}
+                        onChange={(e) => updateIngredient(ing.id, { optional: e.target.checked })}
+                        aria-label={`Ingrediënt ${ing.name || ''} optioneel`}
+                        className="w-4 h-4 rounded border-zinc-300 text-[#14532D] focus:ring-[#14532D] cursor-pointer"
+                      />
+                      <span className="md:hidden">Optioneel</span>
+                    </label>
                     <button
                       type="button"
                       onClick={() =>
@@ -666,26 +709,55 @@ export function RecipeEditorModal({
 
             {/* Section 4: Steps */}
             <section className="space-y-4 pt-6 border-t border-zinc-200">
-              <h3 className="font-editorial text-lg font-semibold text-zinc-900">
-                04. Bereidingsstappen
-              </h3>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="font-editorial text-lg font-semibold text-zinc-900">
+                  04. Bereidingsstappen
+                </h3>
+                <span className="text-xs text-zinc-500">
+                  De <strong className="font-bold text-zinc-800">eerste zin</strong> van elke stap wordt automatisch vetgedrukt · optionele stappen verschijnen (tussen haakjes)
+                </span>
+              </div>
 
               <div className="space-y-3">
                 {steps.map((step, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5">
+                  <div
+                    key={step.id}
+                    className={`flex items-start gap-2.5 rounded-xl transition-colors ${
+                      step.optional ? 'bg-zinc-50/90 p-2.5 -mx-2.5 border border-dashed border-zinc-200' : ''
+                    }`}
+                  >
                     <span className="font-mono text-xs font-medium text-[#14532D] pt-3 w-6 shrink-0 tabular-nums">
                       {String(idx + 1).padStart(2, '0')}.
                     </span>
-                    <textarea
-                      rows={2}
-                      maxLength={1500}
-                      value={step}
-                      onChange={(e) =>
-                        setSteps((prev) => prev.map((s, i) => (i === idx ? e.target.value : s)))
-                      }
-                      placeholder={`Beschrijf stap ${idx + 1}...`}
-                      className="flex-1 px-3.5 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14532D]/20 focus:border-[#14532D]"
-                    />
+                    <div className="flex-1 space-y-1.5">
+                      <textarea
+                        rows={2}
+                        maxLength={1500}
+                        value={step.text}
+                        onChange={(e) =>
+                          setSteps((prev) =>
+                            prev.map((s, i) => (i === idx ? { ...s, text: e.target.value } : s))
+                          )
+                        }
+                        placeholder={`Beschrijf stap ${idx + 1}... (De eerste zin verschijnt automatisch in het vet.)`}
+                        className="w-full px-3.5 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14532D]/20 focus:border-[#14532D]"
+                      />
+                      <label className="inline-flex items-center gap-1.5 text-xs text-zinc-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={step.optional}
+                          onChange={(e) =>
+                            setSteps((prev) =>
+                              prev.map((s, i) =>
+                                i === idx ? { ...s, optional: e.target.checked } : s
+                              )
+                            )
+                          }
+                          className="w-3.5 h-3.5 rounded border-zinc-300 text-[#14532D] focus:ring-[#14532D] cursor-pointer"
+                        />
+                        <span>Optionele stap (verschijnt tussen haakjes)</span>
+                      </label>
+                    </div>
                     <div className="flex flex-col gap-1 shrink-0">
                       <button
                         type="button"
@@ -724,7 +796,7 @@ export function RecipeEditorModal({
 
               <button
                 type="button"
-                onClick={() => setSteps((prev) => (prev.length < 40 ? [...prev, ''] : prev))}
+                onClick={() => setSteps((prev) => (prev.length < 40 ? [...prev, makeStep()] : prev))}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-zinc-800 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />

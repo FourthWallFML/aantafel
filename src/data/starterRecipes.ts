@@ -117,7 +117,7 @@ export function createStarterRecipes(ownerId: string): Recipe[] {
         { id: 'ap6', name: 'Witte basterdsuiker', amount: '150', unit: 'g', preparation: '', storageCategory: 'proviandkast' },
         { id: 'ap7', name: 'Kristalsuiker', amount: '50', unit: 'g', preparation: 'voor de appelvulling', storageCategory: 'proviandkast' },
         { id: 'ap8', name: 'Gemalen kaneel', amount: '3', unit: 'tl', preparation: '', storageCategory: 'proviandkast' },
-        { id: 'ap9', name: 'Rozijnen', amount: '75', unit: 'g', preparation: 'geweld in lauwwarm water en drooggedept', storageCategory: 'proviandkast' },
+        { id: 'ap9', name: 'Rozijnen', amount: '75', unit: 'g', preparation: 'geweld in lauwwarm water en drooggedept', optional: true, storageCategory: 'proviandkast' },
         { id: 'ap10', name: 'Paneermeel', amount: '2', unit: 'el', preparation: '', storageCategory: 'proviandkast' },
       ],
       steps: [

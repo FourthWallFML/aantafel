@@ -286,10 +286,16 @@ export default function App() {
                     amount: String(ing.amount ?? '').slice(0, 40),
                     unit: String(ing.unit || '').slice(0, 40),
                     preparation: String(ing.preparation || '').slice(0, 160),
+                    optional: Boolean(ing.optional),
                     storageCategory: (ing.storageCategory as StorageCategory) || 'vers',
                   }))
                 : [],
               steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
+              optionalStepIndices: Array.isArray(data.optionalStepIndices)
+                ? data.optionalStepIndices
+                    .map(Number)
+                    .filter((n: number) => Number.isInteger(n) && n >= 0 && n < 40)
+                : [],
               notes: String(data.notes || ''),
               createdAtMs: timestampToMs(data.createdAt),
               updatedAtMs: timestampToMs(data.updatedAt),
@@ -607,6 +613,7 @@ export default function App() {
           videoLocalId: rec.videoLocalId,
           ingredients: rec.ingredients,
           steps: rec.steps,
+          optionalStepIndices: rec.optionalStepIndices || [],
           notes: rec.notes,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -862,12 +869,19 @@ export default function App() {
             amount: String(ing.amount || '').slice(0, 40),
             unit: String(ing.unit || '').slice(0, 40),
             preparation: String(ing.preparation || '').trim().slice(0, 160),
+            optional: Boolean(ing.optional),
             storageCategory: ing.storageCategory,
           })),
           steps: r.steps
             .filter((s) => s.trim().length > 0)
             .slice(0, 40)
             .map((s) => s.slice(0, 1500)),
+          optionalStepIndices: Array.isArray(r.optionalStepIndices)
+            ? r.optionalStepIndices
+                .map(Number)
+                .filter((n) => Number.isInteger(n) && n >= 0 && n < 40)
+                .slice(0, 40)
+            : [],
           notes: r.notes.slice(0, 2000),
         };
       });
@@ -1032,6 +1046,7 @@ export default function App() {
       videoLocalId: '',
       ingredients: snap.ingredients,
       steps: snap.steps,
+      optionalStepIndices: snap.optionalStepIndices || [],
       notes: snap.notes,
     });
   };
@@ -1075,10 +1090,17 @@ export default function App() {
               amount: String(ing.amount ?? '').slice(0, 40),
               unit: String(ing.unit || '').slice(0, 40),
               preparation: String(ing.preparation || '').trim().slice(0, 160),
+              optional: Boolean(ing.optional),
               storageCategory: ing.storageCategory || 'vers',
             }))
           : [],
         steps: Array.isArray(r.steps) ? r.steps.slice(0, 40) : [],
+        optionalStepIndices: Array.isArray(r.optionalStepIndices)
+          ? r.optionalStepIndices
+              .map(Number)
+              .filter((n) => Number.isInteger(n) && n >= 0 && n < 40)
+              .slice(0, 40)
+          : [],
         notes: String(r.notes || '').slice(0, 2000),
       });
     }

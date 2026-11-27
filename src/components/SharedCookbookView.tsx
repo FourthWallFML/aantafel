@@ -2,6 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { ArrowLeft, BookOpen, Check, Copy, FileDown, Search } from 'lucide-react';
 import { Recipe, SharedCookbook, SharedRecipeSnapshot } from '../types';
 import { generateCookbookPdf } from '../utils/pdfCookbook';
+import {
+  formatIngredientParts,
+  isStepOptional,
+  splitFirstSentence,
+} from '../utils/recipeFormatting';
 import { RecipeImage } from './RecipeImage';
 
 interface SharedCookbookViewProps {
@@ -165,16 +170,13 @@ export const SharedCookbookView: React.FC<SharedCookbookViewProps> = ({
 
                 <ul className="space-y-2 text-[13.5px] leading-[1.45]">
                   {selectedRecipe.ingredients.map((ing) => {
-                    const qty = [ing.amount, ing.unit].filter(Boolean).join(' ');
-                    const prep = (ing.preparation || '').trim();
-                    const boldBase = [qty, ing.name.trim()].filter(Boolean).join(' ');
+                    const { boldPart, prepPart, optional } = formatIngredientParts(ing);
                     return (
                       <li key={ing.id} className="pl-3 -indent-3">
-                        <span className="font-bold text-[#121212]">
-                          {boldBase}
-                          {prep ? ',' : ''}
-                        </span>
-                        {prep && <span className="font-normal text-zinc-700"> {prep}</span>}
+                        {optional && <span className="font-normal text-zinc-700">(</span>}
+                        <span className="font-bold text-[#121212]">{boldPart}</span>
+                        {prepPart && <span className="font-normal text-zinc-700"> {prepPart}</span>}
+                        {optional && <span className="font-normal text-zinc-700">)</span>}
                       </li>
                     );
                   })}
@@ -184,18 +186,25 @@ export const SharedCookbookView: React.FC<SharedCookbookViewProps> = ({
               <div className="lg:col-span-8 space-y-6 text-[15px] leading-[1.7] text-[#121212]">
                 {(selectedRecipe.subtitle || selectedRecipe.story) && (
                   <div className="italic text-[#18181B] space-y-3">
-                    {selectedRecipe.subtitle && <p>{selectedRecipe.subtitle}</p>}
-                    {selectedRecipe.story && <p>{selectedRecipe.story}</p>}
+                    {selectedRecipe.subtitle && <p className="italic">{selectedRecipe.subtitle}</p>}
+                    {selectedRecipe.story && <p className="italic whitespace-pre-line">{selectedRecipe.story}</p>}
                   </div>
                 )}
 
                 <ol className="space-y-4">
-                  {selectedRecipe.steps.map((step, idx) => (
-                    <li key={idx}>
-                      <strong className="font-bold text-[#121212] mr-1.5">{idx + 1}.</strong>
-                      {step}
-                    </li>
-                  ))}
+                  {selectedRecipe.steps.map((step, idx) => {
+                    const { firstSentence, rest } = splitFirstSentence(step);
+                    const optional = isStepOptional(selectedRecipe.optionalStepIndices, idx);
+                    return (
+                      <li key={idx}>
+                        <strong className="font-bold text-[#121212] mr-1.5">{idx + 1}.</strong>
+                        {optional && <span>(</span>}
+                        <strong className="font-bold text-[#121212]">{firstSentence}</strong>
+                        {rest && <span> {rest}</span>}
+                        {optional && <span>)</span>}
+                      </li>
+                    );
+                  })}
                 </ol>
 
                 {selectedRecipe.notes && (

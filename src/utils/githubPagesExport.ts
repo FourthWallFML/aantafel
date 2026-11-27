@@ -191,6 +191,7 @@ export async function downloadStandaloneIndexHtml(
       coverImage: await resolveImageToDataUrl(r.coverImage),
       ingredients: r.ingredients,
       steps: r.steps,
+      optionalStepIndices: r.optionalStepIndices || [],
       notes: r.notes,
     }))
   );
@@ -251,7 +252,7 @@ export async function downloadStandaloneIndexHtml(
     .box { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; }
     .shop-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #f4f4f5; font-size:14px; }
     .shop-row.done { text-decoration:line-through; color:#a1a1aa; }
-    @media print { header, .no-print { display:none !important; } body { background:#fff; } .detail { border:0; padding:0; } }
+    @media print { @page { size: A4 portrait; margin: 14mm; } header, .no-print { display:none !important; } body { background:#fff; font-size:12px; } .detail { border:0; padding:0; margin:0; } .spread { gap:20px; grid-template-columns:200px 1fr; } }
   </style>
 </head>
 <body>
@@ -273,6 +274,28 @@ export async function downloadStandaloneIndexHtml(
     let checkedKeys = JSON.parse(localStorage.getItem('tfb_chk') || '[]');
 
     function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function splitFirstSentence(s){
+      const t = String(s||'').trim();
+      const abbr = new Set(['ca.','bijv.','bv.','min.','max.','ong.','evt.','enz.','dr.','mr.','st.','el.','tl.','gr.','kg.','ml.','dl.','cl.']);
+      for (let i = 0; i < t.length; i++) {
+        const c = t[i];
+        if (c === '\\n') { const a = t.slice(0,i).trim(); if (a) return [a, t.slice(i+1).trim()]; }
+        if (c === '.' || c === '!' || c === '?') {
+          const prev = i > 0 ? t[i-1] : '', next = i+1 < t.length ? t[i+1] : '';
+          if (c === '.' && /\\d/.test(prev) && /\\d/.test(next)) continue;
+          if (c === '.' && next === '.') continue;
+          let end = i + 1;
+          while (end < t.length && /["'”’»)]/.test(t[end])) end++;
+          if (end < t.length && !/\\s/.test(t[end])) continue;
+          if (c === '.') {
+            const m = t.slice(0, i+1).match(/([a-zA-ZÀ-ÿ]+\\.)$/);
+            if (m && abbr.has(m[1].toLowerCase())) continue;
+          }
+          return [t.slice(0, end).trim(), t.slice(end).trim()];
+        }
+      }
+      return [t, ''];
+    }
     function saveState(){
       localStorage.setItem('tfb_sel', JSON.stringify(selectedIds));
       localStorage.setItem('tfb_chk', JSON.stringify(checkedKeys));
@@ -319,7 +342,9 @@ export async function downloadStandaloneIndexHtml(
                   \${(r.ingredients||[]).map(i => {
                     const base = [i.amount, i.unit, i.name].filter(Boolean).join(' ');
                     const prep = (i.preparation || '').trim();
-                    return \`<li><strong>\${esc(base)}\${prep ? ',' : ''}</strong>\${prep ? ' ' + esc(prep) : ''}</li>\`;
+                    const openP = i.optional ? '(' : '';
+                    const closeP = i.optional ? ')' : '';
+                    return \`<li>\${openP}<strong>\${esc(base)}\${prep ? ',' : ''}</strong>\${prep ? ' ' + esc(prep) : ''}\${closeP}</li>\`;
                   }).join('')}
                 </ul>
               </div>
@@ -327,7 +352,11 @@ export async function downloadStandaloneIndexHtml(
                 \${r.subtitle ? \`<p class="story">\${esc(r.subtitle)}</p>\` : ''}
                 \${r.story ? \`<p class="story">\${esc(r.story)}</p>\` : ''}
                 <div class="steps">
-                  \${(r.steps||[]).map((s, idx) => \`<p><strong>\${idx+1}.</strong> \${esc(s)}</p>\`).join('')}
+                  \${(r.steps||[]).map((s, idx) => {
+                    const [firstS, restS] = splitFirstSentence(s);
+                    const isOpt = Array.isArray(r.optionalStepIndices) && r.optionalStepIndices.includes(idx);
+                    return \`<p><strong>\${idx+1}.</strong> \${isOpt ? '(' : ''}<strong>\${esc(firstS)}</strong>\${restS ? ' ' + esc(restS) : ''}\${isOpt ? ')' : ''}</p>\`;
+                  }).join('')}
                 </div>
                 \${r.notes ? \`<p style="font-size:13.5px;font-style:italic;color:#52525b;border-top:1px solid #e4e4e7;padding-top:12px;">\${esc(r.notes)}</p>\` : ''}
                 \${r.coverImage ? \`<p style="font-size:13px;font-style:italic;color:#52525b;margin-top:16px;"><a href="#standalone-photo" style="color:inherit;text-decoration:none;">Foto op bladzijde 2 ↓</a></p>\` : ''}
