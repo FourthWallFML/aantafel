@@ -69,6 +69,7 @@ export interface Ingredient {
   name: string;
   amount: string;
   unit: string;
+  preparation?: string;
   storageCategory: StorageCategory;
 }
 

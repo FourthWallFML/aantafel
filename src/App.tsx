@@ -70,9 +70,11 @@ import {
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'adamske@gmail.com';
 
+const LOGO_MARK_SRC = `${import.meta.env.BASE_URL}logo-aantafel-mark.png`;
+
 const DEFAULT_PROFILE: UserProfile = {
   displayName: 'Familie',
-  cookbookTitle: 'Ons Familiekookboek',
+  cookbookTitle: 'Aan Tafel!',
   cookbookSubtitle: 'Verzameld aan de keukentafel — recepten om door te geven',
   familyName: 'Familie-editie',
   ingredientMemory: {},
@@ -277,7 +279,16 @@ export default function App() {
               videoUrl: String(data.videoUrl || ''),
               videoTitle: String(data.videoTitle || ''),
               videoLocalId: String(data.videoLocalId || ''),
-              ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+              ingredients: Array.isArray(data.ingredients)
+                ? data.ingredients.map((ing: Record<string, unknown>, idx: number) => ({
+                    id: String(ing.id || `ing_${idx}`).slice(0, 64),
+                    name: String(ing.name || '').slice(0, 150),
+                    amount: String(ing.amount ?? '').slice(0, 40),
+                    unit: String(ing.unit || '').slice(0, 40),
+                    preparation: String(ing.preparation || '').slice(0, 160),
+                    storageCategory: (ing.storageCategory as StorageCategory) || 'vers',
+                  }))
+                : [],
               steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
               notes: String(data.notes || ''),
               createdAtMs: timestampToMs(data.createdAt),
@@ -528,7 +539,11 @@ export default function App() {
         r.title.toLowerCase().includes(q) ||
         r.subtitle.toLowerCase().includes(q) ||
         r.authorName.toLowerCase().includes(q) ||
-        r.ingredients.some((i) => i.name.toLowerCase().includes(q))
+        r.ingredients.some(
+          (i) =>
+            i.name.toLowerCase().includes(q) ||
+            (i.preparation || '').toLowerCase().includes(q)
+        )
       );
     });
   }, [recipes, searchQuery, selectedCategory]);
@@ -806,36 +821,56 @@ export default function App() {
     }
   };
 
-  // Shared Cookbook Links CRUD (Read-only zero-PII snapshots)
+  // Shared Cookbook Links CRUD (Read-only zero-PII snapshots, safely under Firestore 1MB limit)
   const buildSanitizedSnapshots = (recipeIds: string[]): SharedRecipeSnapshot[] => {
     const idSet = new Set(recipeIds);
+    let inlineImageBytesUsed = 0;
+    const MAX_INLINE_IMAGE_BUDGET = 650000;
+
     return recipes
       .filter((r) => idSet.has(r.id))
       .slice(0, 30)
-      .map((r) => ({
-        id: r.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128) || 'rec',
-        title: r.title.slice(0, 140),
-        subtitle: r.subtitle.slice(0, 220),
-        story: r.story.slice(0, 3000),
-        category: r.category,
-        prepMinutes: Math.max(0, Math.min(1440, r.prepMinutes)),
-        cookMinutes: Math.max(0, Math.min(2880, r.cookMinutes)),
-        servings: Math.max(1, Math.min(100, r.servings)),
-        authorName: (r.authorName || 'Familielid').slice(0, 100),
-        coverImage: r.coverImage.length <= 200000 ? r.coverImage : '',
-        ingredients: r.ingredients.slice(0, 60).map((ing, idx) => ({
-          id: (ing.id || `ing_${idx}`).slice(0, 64),
-          name: ing.name.slice(0, 150),
-          amount: String(ing.amount || '').slice(0, 40),
-          unit: String(ing.unit || '').slice(0, 40),
-          storageCategory: ing.storageCategory,
-        })),
-        steps: r.steps
-          .filter((s) => s.trim().length > 0)
-          .slice(0, 40)
-          .map((s) => s.slice(0, 1500)),
-        notes: r.notes.slice(0, 2000),
-      }));
+      .map((r) => {
+        let coverImage = '';
+        if (r.coverImage) {
+          if (r.coverImage.startsWith('data:image/')) {
+            if (
+              r.coverImage.length <= 200000 &&
+              inlineImageBytesUsed + r.coverImage.length <= MAX_INLINE_IMAGE_BUDGET
+            ) {
+              coverImage = r.coverImage;
+              inlineImageBytesUsed += r.coverImage.length;
+            }
+          } else if (r.coverImage.length <= 200000) {
+            coverImage = r.coverImage;
+          }
+        }
+        return {
+          id: r.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128) || 'rec',
+          title: r.title.slice(0, 140),
+          subtitle: r.subtitle.slice(0, 220),
+          story: r.story.slice(0, 3000),
+          category: r.category,
+          prepMinutes: Math.max(0, Math.min(1440, r.prepMinutes)),
+          cookMinutes: Math.max(0, Math.min(2880, r.cookMinutes)),
+          servings: Math.max(1, Math.min(100, r.servings)),
+          authorName: (r.authorName || 'Familielid').slice(0, 100),
+          coverImage,
+          ingredients: r.ingredients.slice(0, 60).map((ing, idx) => ({
+            id: (ing.id || `ing_${idx}`).slice(0, 64),
+            name: ing.name.slice(0, 150),
+            amount: String(ing.amount || '').slice(0, 40),
+            unit: String(ing.unit || '').slice(0, 40),
+            preparation: String(ing.preparation || '').trim().slice(0, 160),
+            storageCategory: ing.storageCategory,
+          })),
+          steps: r.steps
+            .filter((s) => s.trim().length > 0)
+            .slice(0, 40)
+            .map((s) => s.slice(0, 1500)),
+          notes: r.notes.slice(0, 2000),
+        };
+      });
   };
 
   const handleCreateOrSyncShareLink = async (options: {
@@ -1033,7 +1068,16 @@ export default function App() {
         videoUrl: String(r.videoUrl || '').slice(0, 600),
         videoTitle: String(r.videoTitle || '').slice(0, 160),
         videoLocalId: '',
-        ingredients: Array.isArray(r.ingredients) ? r.ingredients.slice(0, 60) : [],
+        ingredients: Array.isArray(r.ingredients)
+          ? r.ingredients.slice(0, 60).map((ing, idx) => ({
+              id: String(ing.id || `ing_${idx}`).slice(0, 64),
+              name: String(ing.name || '').slice(0, 150),
+              amount: String(ing.amount ?? '').slice(0, 40),
+              unit: String(ing.unit || '').slice(0, 40),
+              preparation: String(ing.preparation || '').trim().slice(0, 160),
+              storageCategory: ing.storageCategory || 'vers',
+            }))
+          : [],
         steps: Array.isArray(r.steps) ? r.steps.slice(0, 40) : [],
         notes: String(r.notes || '').slice(0, 2000),
       });
@@ -1370,13 +1414,20 @@ export default function App() {
       {/* Strict 3-Zone Top Bar Contract (5 single-line nav links) */}
       <header className="sticky top-0 z-30 bg-[#FAFAFA]/95 backdrop-blur-sm border-b border-zinc-200 no-print">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-8">
-          {/* Zone 1: Single text element wordmark */}
+          {/* Zone 1: Brand mark + Aan Tafel! wordmark */}
           <button
             type="button"
             onClick={() => setActiveTab('kookboek')}
-            className="font-editorial text-xl font-semibold tracking-tight text-zinc-950 whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer group"
           >
-            Tafelboek
+            <img
+              src={LOGO_MARK_SRC}
+              alt="Aan Tafel! logo"
+              className="h-9 w-auto object-contain select-none"
+            />
+            <span className="font-editorial text-[21px] font-bold tracking-tight text-[#1C3454] group-hover:text-[#14532D] transition-colors">
+              Aan Tafel!
+            </span>
           </button>
 
           {/* Zone 2: 5 clean single-line text navigation links */}
@@ -1604,7 +1655,7 @@ export default function App() {
                 <RecipeImage
                   src={HERO_TABLE_IMAGE}
                   alt="Opengeslagen familiekookboek op een eikenhouten keukentafel met verse ingrediënten"
-                  fallbackTitle="Tafelboek"
+                  fallbackTitle="Aan Tafel!"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -1736,30 +1787,33 @@ export default function App() {
                         </button>
 
                         <div className="p-6 flex-1 flex flex-col justify-between gap-5">
-                          <div className="space-y-2.5">
-                            <div className="flex items-center gap-2 text-xs text-zinc-500 tabular-nums">
-                              <span className="font-medium text-[#14532D]">{recipe.category}</span>
-                              <span aria-hidden="true">·</span>
-                              <span className="truncate">{recipe.authorName}</span>
-                              <span aria-hidden="true">·</span>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2 text-[10.5px] uppercase tracking-[0.12em] text-zinc-500 tabular-nums">
+                              <span className="font-semibold text-[#121212]">{recipe.category}</span>
                               <span className="whitespace-nowrap">{totalMinutes} min</span>
                             </div>
 
                             <button
                               type="button"
                               onClick={() => setDetailRecipeId(recipe.id)}
-                              className="text-left block w-full cursor-pointer"
+                              className="text-left block w-full cursor-pointer pt-0.5"
                             >
-                              <h2 className="font-editorial text-xl font-semibold text-zinc-950 group-hover:text-[#14532D] transition-colors leading-snug">
+                              <h2 className="text-[19px] font-bold tracking-tight text-[#121212] group-hover:text-[#14532D] transition-colors leading-snug">
                                 {recipe.title}
                               </h2>
                             </button>
 
-                            {recipe.subtitle && (
-                              <p className="text-sm text-zinc-600 line-clamp-2 leading-relaxed">
-                                {recipe.subtitle}
-                              </p>
-                            )}
+                            <div className="border-t border-zinc-200 pt-2.5">
+                              {recipe.subtitle ? (
+                                <p className="text-[13px] italic text-zinc-600 line-clamp-2 leading-relaxed">
+                                  {recipe.subtitle}
+                                </p>
+                              ) : recipe.story ? (
+                                <p className="text-[13px] italic text-zinc-600 line-clamp-2 leading-relaxed">
+                                  {recipe.story}
+                                </p>
+                              ) : null}
+                            </div>
                           </div>
 
                           <div className="pt-4 border-t border-zinc-100 flex items-center justify-between gap-3">
@@ -1867,6 +1921,12 @@ export default function App() {
             adminRecords={cloudAdminRecords}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}
+            onSeedRecipes={handleSeedCloudRecipes}
+            seedingRecipes={seedingCloud}
+            onCreateNewRecipe={() => {
+              setEditingRecipe(null);
+              setEditorOpen(true);
+            }}
             onSaveProfile={handleSaveProfile}
             onEditRecipe={(rec) => {
               setEditingRecipe(rec);
@@ -1895,7 +1955,16 @@ export default function App() {
       {/* Quiet Editorial Footer */}
       <footer className="border-t border-zinc-200 bg-white mt-12 no-print">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500">
-          <span>Tafelboek — Familiekookboek &amp; Boodschappenmanager</span>
+          <span className="inline-flex items-center gap-2">
+            <img
+              src={LOGO_MARK_SRC}
+              alt=""
+              aria-hidden="true"
+              className="h-5 w-auto object-contain opacity-90"
+            />
+            <span className="font-medium text-[#1C3454]">Aan Tafel!</span>
+            <span>— Familiekookboek &amp; Boodschappenmanager</span>
+          </span>
           <span>PDF-kookboek · Vers &amp; Voorraad-geheugen · Delen &amp; Beheer · PWA</span>
         </div>
       </footer>

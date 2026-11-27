@@ -1,4 +1,4 @@
-name: Publiceer Tafelboek op GitHub Pages
+name: Publiceer Aan Tafel! op GitHub Pages
 
 on:
   push:

@@ -72,7 +72,7 @@ export const PWAInstallButton: React.FC<{ variant?: 'compact' | 'panel' }> = ({
                   Scroll omlaag en tik op <strong>Zet op beginscherm</strong>.
                 </li>
                 <li>
-                  Tik op <strong>Voeg toe</strong> om Tafelboek als app te openen.
+                  Tik op <strong>Voeg toe</strong> om Aan Tafel! als app te openen.
                 </li>
               </ol>
               <button

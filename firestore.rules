@@ -104,11 +104,12 @@ service cloud.firestore {
     function isValidIngredientItem(item) {
       return item is map
         && item.keys().hasAll(['id', 'name', 'amount', 'unit', 'storageCategory'])
-        && item.keys().hasOnly(['id', 'name', 'amount', 'unit', 'storageCategory'])
+        && item.keys().hasOnly(['id', 'name', 'amount', 'unit', 'storageCategory', 'preparation'])
         && item.id is string && item.id.size() >= 1 && item.id.size() <= 64
         && item.name is string && item.name.size() >= 1 && item.name.size() <= 150
         && (item.amount is number || (item.amount is string && item.amount.size() <= 40))
         && item.unit is string && item.unit.size() <= 40
+        && (!('preparation' in item) || (item.preparation is string && item.preparation.size() <= 160))
         && item.storageCategory in ['vers', 'proviandkast', 'diepvries', 'bakkerij'];
     }
 

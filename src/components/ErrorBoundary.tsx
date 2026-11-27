@@ -17,7 +17,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    let friendly = 'Er is een onverwachte fout opgetreden bij het laden van Tafelboek.';
+    let friendly = 'Er is een onverwachte fout opgetreden bij het laden van Aan Tafel!.';
     try {
       const parsed = JSON.parse(error.message);
       if (parsed && typeof parsed.error === 'string') {
@@ -40,7 +40,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error) {
-    console.error('Tafelboek ErrorBoundary:', error);
+    console.error('Aan Tafel! ErrorBoundary:', error);
   }
 
   render() {
@@ -48,7 +48,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       return (
         <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-6">
           <div className="max-w-md w-full bg-white border border-zinc-200 rounded-xl p-8 text-center">
-            <p className="text-xs font-medium text-[#14532D] tracking-wide mb-2">Tafelboek</p>
+            <p className="text-xs font-medium text-[#1C3454] tracking-wide mb-2">Aan Tafel!</p>
             <h1 className="font-editorial text-2xl font-semibold text-zinc-900 mb-3">
               Er ging iets mis
             </h1>

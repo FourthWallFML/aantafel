@@ -95,6 +95,95 @@ function sanitizeFilename(name: string): string {
   );
 }
 
+interface StyledWordToken {
+  text: string;
+  bold: boolean;
+}
+
+/**
+ * Draws an ingredient line in the narrow left column with seamless inline bold -> regular transition:
+ *   **<hoeveelheid> <eenheid> <ingrediënt>,** <voorbereiding>
+ * Wrapped continuation lines get a crisp hanging indent (+3mm).
+ */
+function drawStyledIngredient(
+  doc: jsPDF,
+  x: number,
+  startY: number,
+  maxWidth: number,
+  hangingIndent: number,
+  boldText: string,
+  regularText: string,
+  maxY: number,
+  inkBlack: [number, number, number],
+  inkSoft: [number, number, number]
+): number {
+  const fontSize = 8.4;
+  const lineHeight = 4.1;
+
+  const tokens: StyledWordToken[] = [];
+  const pushWords = (str: string, bold: boolean) => {
+    const words = str.trim().split(/\s+/).filter(Boolean);
+    for (const w of words) {
+      tokens.push({ text: w, bold });
+    }
+  };
+
+  pushWords(boldText, true);
+  if (regularText.trim()) {
+    pushWords(regularText, false);
+  }
+  if (tokens.length === 0) return startY;
+
+  doc.setFontSize(fontSize);
+  const measureToken = (token: StyledWordToken) => {
+    doc.setFont('helvetica', token.bold ? 'bold' : 'normal');
+    return doc.getTextWidth(token.text);
+  };
+  doc.setFont('helvetica', 'normal');
+  const spaceW = doc.getTextWidth(' ');
+
+  const lines: StyledWordToken[][] = [];
+  let currentLine: StyledWordToken[] = [];
+  let currentW = 0;
+
+  const lineLimit = () => (lines.length === 0 ? maxWidth : maxWidth - hangingIndent);
+
+  for (const token of tokens) {
+    const w = measureToken(token);
+    const needed = currentLine.length === 0 ? w : spaceW + w;
+    if (currentLine.length > 0 && currentW + needed > lineLimit()) {
+      lines.push(currentLine);
+      currentLine = [token];
+      currentW = w;
+    } else {
+      currentLine.push(token);
+      currentW += needed;
+    }
+  }
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+
+  let y = startY;
+  lines.forEach((lineTokens, lineIdx) => {
+    if (y > maxY) return;
+    let cursorX = x + (lineIdx === 0 ? 0 : hangingIndent);
+    lineTokens.forEach((tok, tokIdx) => {
+      if (tokIdx > 0) {
+        cursorX += spaceW;
+      }
+      doc.setFont('helvetica', tok.bold ? 'bold' : 'normal');
+      doc.setFontSize(fontSize);
+      doc.setTextColor(...(tok.bold ? inkBlack : inkSoft));
+      doc.text(tok.text, cursorX, y);
+      cursorX += doc.getTextWidth(tok.text);
+    });
+    y += lineHeight;
+  });
+
+  return y;
+}
+
 export interface RegisterEntry {
   headword: string;
   refs: { title: string; page: number }[];
@@ -187,8 +276,12 @@ export async function generateCookbookPdf(
     }
   };
 
-  // Preload photos (cropped to tall editorial portrait plate when placed on opposite page)
+  // Preload brand logo for frontpage + main and extra recipe photos
+  const logoUrl = `${import.meta.env.BASE_URL}logo-aantafel.png`;
+  const coverLogo = settings.includeCover ? await loadImageAsJpegDataUrl(logoUrl) : null;
+
   const photoCache = new Map<string, { dataUrl: string; width: number; height: number } | null>();
+  const extraPhotosCache = new Map<string, { dataUrl: string; width: number; height: number }[]>();
   if (settings.includePhotos) {
     const plateAspect = settings.photoOnOppositePage ? 162 / 236 : 170 / 72;
     await Promise.all(
@@ -197,50 +290,76 @@ export async function generateCookbookPdf(
           const loaded = await loadImageAsJpegDataUrl(recipe.coverImage, plateAspect);
           photoCache.set(recipe.id, loaded);
         }
+        if (recipe.extraImages && recipe.extraImages.length > 0) {
+          const extraLoaded = await Promise.all(
+            recipe.extraImages
+              .slice(0, 3)
+              .map((imgSrc) => loadImageAsJpegDataUrl(imgSrc, 4 / 3))
+          );
+          extraPhotosCache.set(
+            recipe.id,
+            extraLoaded.filter(
+              (item): item is { dataUrl: string; width: number; height: number } => Boolean(item)
+            )
+          );
+        }
       })
     );
   }
 
-  // 1. Minimalist Editorial Cover Page (Voorblad)
+  // 1. Classic Editorial Frontpage (Voorblad) featuring the Aan Tafel! logo
   if (settings.includeCover) {
     startFreshPage();
+    const centerX = pageWidth / 2;
+    const brandNavy: [number, number, number] = [28, 52, 84];
 
+    // Subtle warm editorial top kicker
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(...inkSoft);
-    doc.text((settings.familyName || 'Familiekookboek').toUpperCase(), marginX, 34, {
-      charSpace: 1.5,
+    doc.text((settings.familyName || 'Familie-editie').toUpperCase(), centerX, 34, {
+      align: 'center',
+      charSpace: 2,
     });
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(34);
-    doc.setTextColor(...inkBlack);
-    const titleLines = doc.splitTextToSize(settings.title || 'Ons Familiekookboek', contentWidth);
-    doc.text(titleLines, marginX, 62);
+    let afterLogoY = 178;
+    if (coverLogo) {
+      const logoW = 114;
+      const logoH = logoW * (coverLogo.height / coverLogo.width);
+      const logoX = (pageWidth - logoW) / 2;
+      const logoY = 64;
+      doc.addImage(coverLogo.dataUrl, 'JPEG', logoX, logoY, logoW, logoH, undefined, 'MEDIUM');
+      afterLogoY = logoY + logoH + 14;
+    } else {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(34);
+      doc.setTextColor(...brandNavy);
+      doc.text('Aan Tafel!', centerX, 118, { align: 'center' });
+      afterLogoY = 136;
+    }
 
-    const afterTitleY = 62 + titleLines.length * 13;
-
+    // Centered razor-thin editorial hairline
     doc.setDrawColor(...ruleGrey);
     doc.setLineWidth(0.25);
-    doc.line(marginX, afterTitleY + 2, pageWidth - marginX, afterTitleY + 2);
+    doc.line(centerX - 36, afterLogoY, centerX + 36, afterLogoY);
+
+    let textY = afterLogoY + 13;
+    const cleanTitle = (settings.title || '').trim();
+    if (cleanTitle && cleanTitle.toLowerCase() !== 'aan tafel!' && cleanTitle.toLowerCase() !== 'aan tafel') {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(...brandNavy);
+      const titleLines = doc.splitTextToSize(cleanTitle, 130);
+      doc.text(titleLines, centerX, textY, { align: 'center' });
+      textY += titleLines.length * 7 + 4;
+    }
 
     if (settings.subtitle.trim()) {
       doc.setFont('helvetica', 'oblique');
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setTextColor(...inkSoft);
-      const subLines = doc.splitTextToSize(settings.subtitle.trim(), 130);
-      doc.text(subLines, marginX, afterTitleY + 13);
-    }
-
-    if (settings.includePhotos) {
-      const firstPhotoRecipe = orderedRecipes.find((r) => photoCache.get(r.id));
-      const coverPhoto = firstPhotoRecipe ? photoCache.get(firstPhotoRecipe.id) : null;
-      if (coverPhoto) {
-        const boxW = contentWidth;
-        const boxH = 128;
-        const imgY = Math.max(afterTitleY + 30, 128);
-        doc.addImage(coverPhoto.dataUrl, 'JPEG', marginX, imgY, boxW, boxH, undefined, 'MEDIUM');
-      }
+      const subLines = doc.splitTextToSize(settings.subtitle.trim(), 126);
+      doc.text(subLines, centerX, textY, { align: 'center' });
     }
 
     const year = new Date().getFullYear();
@@ -249,8 +368,9 @@ export async function generateCookbookPdf(
     doc.setTextColor(...inkSoft);
     doc.text(
       `${orderedRecipes.length} ${orderedRecipes.length === 1 ? 'recept' : 'recepten'}  ·  ${year}`,
-      marginX,
-      pageHeight - 20
+      centerX,
+      pageHeight - 22,
+      { align: 'center' }
     );
   }
 
@@ -300,7 +420,9 @@ export async function generateCookbookPdf(
     let ruleY = 34 + titleLines.length * 8 + 12;
 
     // Optional inline photo when photoOnOppositePage is OFF
-    const loadedPhoto = settings.includePhotos ? photoCache.get(recipe.id) : null;
+    const loadedPhoto = settings.includePhotos ? photoCache.get(recipe.id) || null : null;
+    const loadedExtraPhotos = settings.includePhotos ? extraPhotosCache.get(recipe.id) || [] : [];
+
     if (loadedPhoto && !settings.photoOnOppositePage) {
       const inlineH = 62;
       doc.addImage(
@@ -325,12 +447,12 @@ export async function generateCookbookPdf(
 
     // Asymmetric 2-Column Layout (borderless left ingredients column + wide right story & steps)
     const leftX = marginX;
-    const leftW = 47;
-    const gutter = 11;
+    const leftW = 49;
+    const gutter = 10;
     const rightX = leftX + leftW + gutter;
-    const rightW = contentWidth - leftW - gutter; // 112mm
+    const rightW = contentWidth - leftW - gutter; // 111mm
 
-    // --- LEFT COLUMN: Timings + Bold Hanging-Indent Ingredients ---
+    // --- LEFT COLUMN: Timings + Bold Ingredient, Regular Preparation ---
     let leftY = bodyStartY;
 
     doc.setFont('helvetica', 'bold');
@@ -351,49 +473,34 @@ export async function generateCookbookPdf(
     doc.text(`Bereiden: ${formatDurationDutch(recipe.cookMinutes)}`, leftX, leftY);
     leftY += 10;
 
-    // Ingredients (bold primary text, hanging indent +3mm on wrapped lines, parenthetical in oblique)
+    // Ingredients: **<hoeveelheid> <eenheid> <ingrediënt>,** <voorbereiding> with +3mm hanging indent
     const hangingIndent = 3;
     for (const ing of recipe.ingredients) {
       if (!ing.name.trim()) continue;
       if (leftY > pageHeight - 24) break;
 
       const qtyStr = [ing.amount.trim(), ing.unit.trim()].filter(Boolean).join(' ');
-      // Split optional parenthetical detail like "Goudrenetten (of Elstar appels)"
-      const parenMatch = ing.name.trim().match(/^([^(]+)(\(.+\))$/);
-      const mainPart = parenMatch
-        ? `${qtyStr ? `${qtyStr} ` : ''}${parenMatch[1].trim()}`
-        : `${qtyStr ? `${qtyStr} ` : ''}${ing.name.trim()}`;
-      const detailPart = parenMatch ? parenMatch[2].trim() : '';
+      const prepStr = (ing.preparation || '').trim();
+      const boldBase = [qtyStr, ing.name.trim()].filter(Boolean).join(' ');
+      const boldPart = prepStr ? `${boldBase},` : boldBase;
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.4);
-      doc.setTextColor(...inkBlack);
+      leftY = drawStyledIngredient(
+        doc,
+        leftX,
+        leftY,
+        leftW,
+        hangingIndent,
+        boldPart,
+        prepStr,
+        pageHeight - 24,
+        inkBlack,
+        inkSoft
+      );
 
-      const firstLineMaxW = leftW;
-      const wrappedMain = doc.splitTextToSize(mainPart, firstLineMaxW);
-      wrappedMain.forEach((line: string, lineIdx: number) => {
-        if (leftY > pageHeight - 24) return;
-        const xOffset = lineIdx === 0 ? 0 : hangingIndent;
-        doc.text(line, leftX + xOffset, leftY);
-        leftY += 4.1;
-      });
-
-      if (detailPart && leftY <= pageHeight - 24) {
-        doc.setFont('helvetica', 'oblique');
-        doc.setFontSize(8);
-        doc.setTextColor(...inkSoft);
-        const detailLines = doc.splitTextToSize(detailPart, leftW - hangingIndent);
-        detailLines.forEach((dLine: string) => {
-          if (leftY > pageHeight - 24) return;
-          doc.text(dLine, leftX + hangingIndent, leftY);
-          leftY += 3.9;
-        });
-      }
-
-      leftY += 1.2;
+      leftY += 1.4;
     }
 
-    // --- RIGHT COLUMN: Italic Intro/Story + Inline Bold Numbered Steps ---
+    // --- RIGHT COLUMN: Italic Dish Intro + Inline Bold Numbered Steps + Photo Page Reference ---
     let rightY = bodyStartY;
     let isOverflowPage = false;
 
@@ -413,30 +520,28 @@ export async function generateCookbookPdf(
     const drawColX = () => (isOverflowPage ? marginX : rightX);
     const drawColW = () => (isOverflowPage ? contentWidth : rightW);
 
-    // Italic editorial intro paragraphs (story + subtitle + chef's notes styled as italic intro like Photo 1)
-    const italicParagraphs: string[] = [];
-    if (recipe.story.trim()) {
-      italicParagraphs.push(...recipe.story.trim().split(/\n\s*\n/).filter(Boolean));
-    } else if (recipe.subtitle.trim()) {
-      italicParagraphs.push(recipe.subtitle.trim());
+    // Strictly italic editorial intro paragraphs (subtitle + story)
+    const italicIntroParagraphs: string[] = [];
+    if (recipe.subtitle.trim()) {
+      italicIntroParagraphs.push(recipe.subtitle.trim());
     }
-    if (recipe.notes.trim()) {
-      italicParagraphs.push(recipe.notes.trim());
+    if (recipe.story.trim()) {
+      italicIntroParagraphs.push(...recipe.story.trim().split(/\n\s*\n/).filter(Boolean));
     }
 
-    if (italicParagraphs.length > 0) {
+    if (italicIntroParagraphs.length > 0) {
       doc.setFont('helvetica', 'oblique');
       doc.setFontSize(9.5);
       doc.setTextColor(...inkBlack);
 
-      for (const para of italicParagraphs) {
+      for (const para of italicIntroParagraphs) {
         const lines = doc.splitTextToSize(para.trim(), drawColW());
         ensureRightSpace(lines.length * 4.6 + 4);
         doc.setFont('helvetica', 'oblique');
         doc.setFontSize(9.5);
         doc.setTextColor(...inkBlack);
         doc.text(lines, drawColX(), rightY);
-        rightY += lines.length * 4.6 + 4;
+        rightY += lines.length * 4.6 + 3.8;
       }
       rightY += 3;
     }
@@ -483,10 +588,22 @@ export async function generateCookbookPdf(
       rightY += 4.2;
     });
 
+    // Optional chef's notes / kooktip in clean italic
+    if (recipe.notes.trim()) {
+      const noteLines = doc.splitTextToSize(recipe.notes.trim(), drawColW());
+      ensureRightSpace(noteLines.length * 4.5 + 6);
+      rightY += 1.5;
+      doc.setFont('helvetica', 'oblique');
+      doc.setFontSize(9.1);
+      doc.setTextColor(...inkSoft);
+      doc.text(noteLines, drawColX(), rightY);
+      rightY += noteLines.length * 4.5 + 3.5;
+    }
+
     // Optional Family Comments (clean italic attribution below steps)
     const recipeComments = commentsByRecipe[recipe.id] || [];
     if (settings.includeComments && recipeComments.length > 0) {
-      rightY += 3;
+      rightY += 2.5;
       ensureRightSpace(14);
       doc.setDrawColor(...ruleGrey);
       doc.setLineWidth(0.2);
@@ -513,6 +630,43 @@ export async function generateCookbookPdf(
         doc.text(cLines, drawColX(), rightY);
         rightY += cLines.length * 4.3 + 3;
       }
+    }
+
+    // Explicit photo page reference at the bottom of the recipe
+    const totalPhotos = (loadedPhoto ? 1 : 0) + loadedExtraPhotos.length;
+    if (settings.includePhotos && totalPhotos > 0) {
+      ensureRightSpace(10);
+      const nextAvailablePage = doc.getNumberOfPages() + 1;
+      let photoRefText = '';
+
+      if (settings.photoOnOppositePage) {
+        const photoPagesCount = (loadedPhoto ? 1 : 0) + (loadedExtraPhotos.length > 0 ? 1 : 0);
+        const photoStartPage = nextAvailablePage;
+        const photoEndPage = photoStartPage + photoPagesCount - 1;
+        if (totalPhotos === 1) {
+          photoRefText = `Foto op bladzijde ${photoStartPage}`;
+        } else if (photoEndPage === photoStartPage) {
+          photoRefText = `Foto's op bladzijde ${photoStartPage}`;
+        } else {
+          photoRefText = `Foto's op bladzijde ${photoStartPage}–${photoEndPage}`;
+        }
+      } else if (loadedPhoto && loadedExtraPhotos.length > 0) {
+        photoRefText = `Foto's op bladzijde ${startPage} en ${nextAvailablePage}`;
+      } else if (loadedPhoto) {
+        photoRefText = `Foto op bladzijde ${startPage}`;
+      } else {
+        photoRefText = `${loadedExtraPhotos.length === 1 ? 'Foto' : "Foto's"} op bladzijde ${nextAvailablePage}`;
+      }
+
+      rightY += 3;
+      doc.setDrawColor(...ruleGrey);
+      doc.setLineWidth(0.2);
+      doc.line(drawColX(), rightY, drawColX() + 18, rightY);
+      rightY += 4.8;
+      doc.setFont('helvetica', 'oblique');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...inkSoft);
+      doc.text(photoRefText, drawColX(), rightY);
     }
 
     // Bottom-left page number on recipe text page
@@ -550,6 +704,47 @@ export async function generateCookbookPdf(
 
       // Bottom-right page number (Photo 2)
       drawPageNumber(photoPageNum, 'right');
+    }
+
+    // --- OPTIONAL EXTRA PHOTOS PLATE PAGE ---
+    if (settings.includePhotos && loadedExtraPhotos.length > 0) {
+      doc.addPage();
+      const extraPageNum = doc.getNumberOfPages();
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.2);
+      doc.setTextColor(...inkSoft);
+      doc.text(recipe.category.toUpperCase(), pageWidth - marginX, 18, {
+        align: 'right',
+        charSpace: 0.7,
+      });
+
+      const plateMarginX = 24;
+      const plateW = pageWidth - plateMarginX * 2; // 162mm
+      const gap = 8;
+
+      if (loadedExtraPhotos.length === 1) {
+        const imgH = 122;
+        doc.addImage(loadedExtraPhotos[0].dataUrl, 'JPEG', plateMarginX, 34, plateW, imgH, undefined, 'MEDIUM');
+      } else if (loadedExtraPhotos.length === 2) {
+        const imgH = 112;
+        doc.addImage(loadedExtraPhotos[0].dataUrl, 'JPEG', plateMarginX, 26, plateW, imgH, undefined, 'MEDIUM');
+        doc.addImage(loadedExtraPhotos[1].dataUrl, 'JPEG', plateMarginX, 26 + imgH + gap, plateW, imgH, undefined, 'MEDIUM');
+      } else {
+        const topH = 116;
+        const bottomW = (plateW - gap) / 2;
+        const bottomH = 104;
+        doc.addImage(loadedExtraPhotos[0].dataUrl, 'JPEG', plateMarginX, 26, plateW, topH, undefined, 'MEDIUM');
+        doc.addImage(loadedExtraPhotos[1].dataUrl, 'JPEG', plateMarginX, 26 + topH + gap, bottomW, bottomH, undefined, 'MEDIUM');
+        doc.addImage(loadedExtraPhotos[2].dataUrl, 'JPEG', plateMarginX + bottomW + gap, 26 + topH + gap, bottomW, bottomH, undefined, 'MEDIUM');
+      }
+
+      doc.setFont('helvetica', 'oblique');
+      doc.setFontSize(8.2);
+      doc.setTextColor(...inkSoft);
+      doc.text(recipe.title, plateMarginX, pageHeight - 23);
+
+      drawPageNumber(extraPageNum, 'right');
     }
   }
 
@@ -754,8 +949,8 @@ export function generateShoppingListPdf(
   let headerY = 16;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.setTextColor(20, 83, 45);
-  doc.text('TAFELBOEK · COMPACTE BOODSCHAPPENLIJST', marginX, headerY, { charSpace: 1 });
+  doc.setTextColor(28, 52, 84);
+  doc.text('AAN TAFEL! · COMPACTE BOODSCHAPPENLIJST', marginX, headerY, { charSpace: 1 });
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 108);

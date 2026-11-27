@@ -775,7 +775,7 @@ export function ShoppingListView({
               </div>
               {memoryEntries.length === 0 ? (
                 <p className="text-xs text-zinc-500">
-                  Nog geen persoonlijke overschrijvingen opgeslagen. Zodra je een ingrediënt verplaatst tussen Vers en Voorraad, onthoudt Tafelboek jouw keuze voortaan automatisch.
+                  Nog geen persoonlijke overschrijvingen opgeslagen. Zodra je een ingrediënt verplaatst tussen Vers en Voorraad, onthoudt Aan Tafel! jouw keuze voortaan automatisch.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
@@ -1059,7 +1059,7 @@ export function ShoppingListView({
                 Terugkerend product toevoegen
               </h2>
               <p className="text-xs text-zinc-600">
-                Voeg producten toe die je regelmatig opnieuw koopt (zoals confituur, koffie, olijfolie of melk). Elke keer dat je een aankoop logt, berekent Tafelboek automatisch het echte gemiddelde in dagen en zet het product op tijd bij &ldquo;Te checken in voorraad&rdquo;.
+                Voeg producten toe die je regelmatig opnieuw koopt (zoals confituur, koffie, olijfolie of melk). Elke keer dat je een aankoop logt, berekent Aan Tafel! automatisch het echte gemiddelde in dagen en zet het product op tijd bij &ldquo;Te checken in voorraad&rdquo;.
               </p>
             </div>
 

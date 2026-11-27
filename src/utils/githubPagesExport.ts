@@ -46,19 +46,25 @@ async function resolveImageToDataUrl(src: string): Promise<string> {
 export function downloadManifestJson(profile: UserProfile) {
   const manifest = {
     id: './',
-    name: `${profile.cookbookTitle || 'Tafelboek'} — Familiekookboek`,
-    short_name: 'Tafelboek',
+    name: `${profile.cookbookTitle || 'Aan Tafel!'} — Familiekookboek`,
+    short_name: 'Aan Tafel!',
     description: profile.cookbookSubtitle || 'Familiekookboek en boodschappenlijst',
     start_url: './index.html',
     scope: './',
     display: 'standalone',
-    theme_color: '#14532D',
-    background_color: '#FAFAFA',
+    theme_color: '#1C3454',
+    background_color: '#F8F5EF',
     icons: [
       {
-        src: './icon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
+        src: './pwa-192x192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: './pwa-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
         purpose: 'any',
       },
     ],
@@ -67,8 +73,8 @@ export function downloadManifestJson(profile: UserProfile) {
 }
 
 export function downloadServiceWorkerJs() {
-  const swCode = `// Tafelboek Service Worker (sw.js) voor GitHub Pages offline ondersteuning
-const CACHE_NAME = 'tafelboek-v1';
+  const swCode = `// Aan Tafel! Service Worker (sw.js) voor GitHub Pages offline ondersteuning
+const CACHE_NAME = 'aantafel-v1';
 const CORE_ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -109,7 +115,7 @@ self.addEventListener('fetch', (event) => {
 }
 
 export function downloadGithubActionsWorkflow() {
-  const yaml = `name: Publiceer Tafelboek op GitHub Pages
+  const yaml = `name: Publiceer Aan Tafel! op GitHub Pages
 
 on:
   push:
@@ -189,7 +195,9 @@ export async function downloadStandaloneIndexHtml(
     }))
   );
 
-  const safeTitle = escapeHtml(profile.cookbookTitle || 'Ons Familiekookboek');
+  const logoMarkDataUrl = await resolveImageToDataUrl(`${import.meta.env.BASE_URL}logo-aantafel-mark.png`);
+
+  const safeTitle = escapeHtml(profile.cookbookTitle || 'Aan Tafel!');
   const safeSubtitle = escapeHtml(profile.cookbookSubtitle || 'Verzameld aan de keukentafel');
   const safeFamily = escapeHtml(profile.familyName || 'Familie-editie');
 
@@ -199,16 +207,17 @@ export async function downloadStandaloneIndexHtml(
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${safeTitle}</title>
-  <meta name="theme-color" content="#14532D" />
+  <meta name="theme-color" content="#1C3454" />
   <link rel="manifest" href="./manifest.json" />
   <style>
-    :root { --bg:#fafafa; --ink:#111315; --muted:#52525b; --line:#e4e4e7; --accent:#14532d; --amber:#92400e; }
+    :root { --bg:#fafafa; --ink:#111315; --navy:#1c3454; --muted:#52525b; --line:#e4e4e7; --accent:#14532d; --amber:#92400e; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); line-height:1.55; }
     header { position:sticky; top:0; z-index:10; background:rgba(250,250,250,0.95); backdrop-filter:blur(6px); border-bottom:1px solid var(--line); }
     .wrap { max-width:1100px; margin:0 auto; padding:0 20px; }
     .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:60px; flex-wrap:wrap; padding:10px 0; }
-    .brand { font-size:20px; font-weight:700; letter-spacing:-0.02em; }
+    .brand { display:inline-flex; align-items:center; gap:10px; font-size:20px; font-weight:700; letter-spacing:-0.02em; color:var(--navy); }
+    .brand img { height:34px; width:auto; display:block; }
     .tabs { display:flex; gap:12px; }
     .tab { border:0; background:none; padding:6px 10px; font-size:14px; font-weight:600; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; }
     .tab.active { color:var(--ink); border-bottom-color:var(--accent); }
@@ -233,9 +242,10 @@ export async function downloadStandaloneIndexHtml(
     .detail { background:#fff; border:1px solid var(--line); border-radius:16px; padding:28px; margin:20px 0; }
     .spread { display:grid; grid-template-columns:260px 1fr; gap:32px; margin-top:20px; }
     @media (max-width:760px) { .spread { grid-template-columns:1fr; } }
-    .ing-list { list-style:none; padding:0; margin:14px 0 0; font-size:14px; }
-    .ing-list li { margin-bottom:6px; font-weight:600; }
-    .story { font-style:italic; color:#3f3f46; margin-top:0; }
+    .ing-list { list-style:none; padding:0; margin:14px 0 0; font-size:13.5px; line-height:1.45; }
+    .ing-list li { margin-bottom:7px; padding-left:12px; text-indent:-12px; font-weight:400; color:#3f3f46; }
+    .ing-list li strong { font-weight:700; color:#121212; }
+    .story { font-style:italic; color:#18181b; margin-top:0; }
     .steps p { margin:0 0 12px; }
     .list-cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
     .box { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; }
@@ -247,7 +257,7 @@ export async function downloadStandaloneIndexHtml(
 <body>
   <header class="no-print">
     <div class="wrap topbar">
-      <div class="brand">${safeTitle}</div>
+      <div class="brand">${logoMarkDataUrl ? `<img src="${logoMarkDataUrl}" alt="Aan Tafel!" />` : ''}${safeTitle}</div>
       <div class="tabs">
         <button class="tab active" id="tab-book" onclick="setView('book')">Kookboek</button>
         <button class="tab" id="tab-shop" onclick="setView('shop')">Boodschappen (<span id="shop-count">0</span>)</button>
@@ -302,21 +312,28 @@ export async function downloadStandaloneIndexHtml(
             <hr style="border:0;border-top:1px solid #d4d4d8;margin:0;" />
             <div class="spread">
               <div>
-                <div style="font-size:13px;font-weight:700;">Voor \${r.servings} personen</div>
-                <div style="font-size:13px;color:#3f3f46;">Voorbereiden: \${r.prepMinutes} min · Bereiden: \${r.cookMinutes} min</div>
+                <div style="font-size:13px;font-weight:700;">Voor \${r.servings} \${r.servings === 1 ? 'persoon' : 'personen'}</div>
+                <div style="font-size:13px;color:#52525b;">Voorbereiden: \${r.prepMinutes} minuten</div>
+                <div style="font-size:13px;color:#52525b;">Bereiden: \${r.cookMinutes} minuten</div>
                 <ul class="ing-list">
-                  \${(r.ingredients||[]).map(i => \`<li>\${esc([i.amount, i.unit, i.name].filter(Boolean).join(' '))}</li>\`).join('')}
+                  \${(r.ingredients||[]).map(i => {
+                    const base = [i.amount, i.unit, i.name].filter(Boolean).join(' ');
+                    const prep = (i.preparation || '').trim();
+                    return \`<li><strong>\${esc(base)}\${prep ? ',' : ''}</strong>\${prep ? ' ' + esc(prep) : ''}</li>\`;
+                  }).join('')}
                 </ul>
               </div>
               <div>
+                \${r.subtitle ? \`<p class="story">\${esc(r.subtitle)}</p>\` : ''}
                 \${r.story ? \`<p class="story">\${esc(r.story)}</p>\` : ''}
                 <div class="steps">
                   \${(r.steps||[]).map((s, idx) => \`<p><strong>\${idx+1}.</strong> \${esc(s)}</p>\`).join('')}
                 </div>
-                \${r.notes ? \`<p style="font-size:13px;color:#52525b;border-top:1px solid #e4e4e7;padding-top:12px;"><strong>Tip:</strong> \${esc(r.notes)}</p>\` : ''}
-                \${r.coverImage ? \`<img src="\${r.coverImage}" alt="\${esc(r.title)}" style="width:100%;max-height:420px;object-fit:cover;border-radius:12px;margin-top:16px;" />\` : ''}
+                \${r.notes ? \`<p style="font-size:13.5px;font-style:italic;color:#52525b;border-top:1px solid #e4e4e7;padding-top:12px;">\${esc(r.notes)}</p>\` : ''}
+                \${r.coverImage ? \`<p style="font-size:13px;font-style:italic;color:#52525b;margin-top:16px;"><a href="#standalone-photo" style="color:inherit;text-decoration:none;">Foto op bladzijde 2 ↓</a></p>\` : ''}
               </div>
             </div>
+            \${r.coverImage ? \`<div id="standalone-photo" style="margin-top:28px;padding-top:24px;border-top:1px solid #e4e4e7;"><img src="\${r.coverImage}" alt="\${esc(r.title)}" style="width:100%;max-height:460px;object-fit:cover;display:block;" /></div>\` : ''}
           </article>\`;
         return;
       }
@@ -416,7 +433,7 @@ export function downloadJsonBackup(
   };
   const dateSlug = new Date().toISOString().slice(0, 10);
   triggerDownload(
-    `tafelboek-backup-${dateSlug}.json`,
+    `aan-tafel-backup-${dateSlug}.json`,
     JSON.stringify(payload, null, 2),
     'application/json'
   );

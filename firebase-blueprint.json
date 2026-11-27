@@ -330,7 +330,7 @@
         },
         "ingredients": {
           "type": "array",
-          "description": "Gestructureerde ingrediëntenlijst met hoeveelheid, eenheid en opslagcategorie (vers, proviandkast, diepvries, bakkerij)."
+          "description": "Gestructureerde ingrediëntenlijst met hoeveelheid, eenheid, optionele voorbereiding (max 160 tekens, bijv. in blokjes gesneden) en opslagcategorie (vers, proviandkast, diepvries, bakkerij)."
         },
         "steps": {
           "type": "array",

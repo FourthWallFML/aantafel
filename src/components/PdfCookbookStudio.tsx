@@ -40,7 +40,7 @@ export function PdfCookbookStudio({
   profile,
   onSaveProfile,
 }: PdfCookbookStudioProps) {
-  const [title, setTitle] = useState(profile.cookbookTitle || 'Ons Familiekookboek');
+  const [title, setTitle] = useState(profile.cookbookTitle || 'Aan Tafel!');
   const [subtitle, setSubtitle] = useState(
     profile.cookbookSubtitle || 'Verzameld aan de keukentafel — recepten om door te geven'
   );
@@ -101,7 +101,13 @@ export function PdfCookbookStudio({
     if (includeCover) page += 1;
     if (includeToc) page += 1;
 
-    const records: { recipe: Recipe; page: number; photoPage: number | null }[] = [];
+    const records: {
+      recipe: Recipe;
+      page: number;
+      photoPage: number | null;
+      photoEndPage: number | null;
+      photoRefLabel: string;
+    }[] = [];
     const chapterStarts = new Map<string, number>();
 
     for (const r of selectedOrderedRecipes) {
@@ -110,12 +116,51 @@ export function PdfCookbookStudio({
         chapterStarts.set(r.category, textPage);
       }
       page += 1;
+
+      const hasCover = Boolean(r.coverImage);
+      const extraCount = (r.extraImages || []).filter(Boolean).length;
+      const totalPhotos = (hasCover ? 1 : 0) + extraCount;
+
       let photoPage: number | null = null;
-      if (includePhotos && photoOnOppositePage && r.coverImage) {
-        photoPage = page;
-        page += 1;
+      let photoEndPage: number | null = null;
+      let photoRefLabel = '';
+
+      if (includePhotos && totalPhotos > 0) {
+        if (photoOnOppositePage) {
+          photoPage = page;
+          const photoPagesCount = (hasCover ? 1 : 0) + (extraCount > 0 ? 1 : 0);
+          photoEndPage = photoPage + photoPagesCount - 1;
+          page += photoPagesCount;
+
+          if (totalPhotos === 1) {
+            photoRefLabel = `Foto op bladzijde ${photoPage}`;
+          } else if (photoEndPage === photoPage) {
+            photoRefLabel = `Foto's op bladzijde ${photoPage}`;
+          } else {
+            photoRefLabel = `Foto's op bladzijde ${photoPage}–${photoEndPage}`;
+          }
+        } else {
+          if (hasCover && extraCount > 0) {
+            const extraPage = page;
+            page += 1;
+            photoPage = textPage;
+            photoEndPage = extraPage;
+            photoRefLabel = `Foto's op bladzijde ${textPage} en ${extraPage}`;
+          } else if (hasCover) {
+            photoPage = textPage;
+            photoEndPage = textPage;
+            photoRefLabel = `Foto op bladzijde ${textPage}`;
+          } else {
+            const extraPage = page;
+            page += 1;
+            photoPage = extraPage;
+            photoEndPage = extraPage;
+            photoRefLabel = `${extraCount === 1 ? 'Foto' : "Foto's"} op bladzijde ${extraPage}`;
+          }
+        }
       }
-      records.push({ recipe: r, page: textPage, photoPage });
+
+      records.push({ recipe: r, page: textPage, photoPage, photoEndPage, photoRefLabel });
     }
 
     const registerPage = includeRegister ? page : null;
@@ -187,7 +232,11 @@ export function PdfCookbookStudio({
     previewPagination.records[
       Math.min(previewRecipeIndex, Math.max(0, previewPagination.records.length - 1))
     ];
-  const firstCoverPhotoRecipe = selectedOrderedRecipes.find((r) => Boolean(r.coverImage));
+  const logoFullSrc = `${import.meta.env.BASE_URL}logo-aantafel.png`;
+  const showCustomCoverTitle =
+    title.trim().length > 0 &&
+    title.trim().toLowerCase() !== 'aan tafel!' &&
+    title.trim().toLowerCase() !== 'aan tafel';
 
   return (
     <div className="space-y-8">
@@ -556,21 +605,19 @@ export function PdfCookbookStudio({
                           </p>
                         </div>
 
-                        <ul className="space-y-1 text-[9px] leading-[1.35]">
+                        <ul className="space-y-1.5 text-[9px] leading-[1.38]">
                           {activeRecord.recipe.ingredients.map((ing) => {
                             const qty = [ing.amount, ing.unit].filter(Boolean).join(' ');
-                            const parenMatch = ing.name.trim().match(/^([^(]+)(\(.+\))$/);
+                            const prep = (ing.preparation || '').trim();
+                            const boldBase = [qty, ing.name.trim()].filter(Boolean).join(' ');
                             return (
                               <li key={ing.id} className="pl-2 -indent-2">
                                 <span className="font-bold text-[#121212]">
-                                  {qty ? `${qty} ` : ''}
-                                  {parenMatch ? parenMatch[1].trim() : ing.name}
+                                  {boldBase}
+                                  {prep ? ',' : ''}
                                 </span>
-                                {parenMatch && (
-                                  <span className="italic font-normal text-zinc-600">
-                                    {' '}
-                                    {parenMatch[2]}
-                                  </span>
+                                {prep && (
+                                  <span className="font-normal text-zinc-700"> {prep}</span>
                                 )}
                               </li>
                             );
@@ -578,12 +625,12 @@ export function PdfCookbookStudio({
                         </ul>
                       </div>
 
-                      {/* Right wider column: Italic intro + Inline bold numbered steps */}
-                      <div className="col-span-8 space-y-4 text-[10px] leading-[1.55] text-[#121212]">
-                        {(activeRecord.recipe.story || activeRecord.recipe.notes) && (
+                      {/* Right wider column: Strictly italic intro + Inline bold numbered steps + Photo ref */}
+                      <div className="col-span-8 space-y-4 text-[10px] leading-[1.58] text-[#121212]">
+                        {(activeRecord.recipe.subtitle || activeRecord.recipe.story) && (
                           <div className="italic space-y-2.5 text-[#18181B]">
+                            {activeRecord.recipe.subtitle && <p>{activeRecord.recipe.subtitle}</p>}
                             {activeRecord.recipe.story && <p>{activeRecord.recipe.story}</p>}
-                            {activeRecord.recipe.notes && <p>{activeRecord.recipe.notes}</p>}
                           </div>
                         )}
 
@@ -594,6 +641,12 @@ export function PdfCookbookStudio({
                             </li>
                           ))}
                         </ol>
+
+                        {activeRecord.recipe.notes && (
+                          <p className="italic text-[9.5px] text-zinc-700 pt-1">
+                            {activeRecord.recipe.notes}
+                          </p>
+                        )}
 
                         {includeComments &&
                           (commentsByRecipe[activeRecord.recipe.id] || []).length > 0 && (
@@ -606,6 +659,15 @@ export function PdfCookbookStudio({
                               ))}
                             </div>
                           )}
+
+                        {activeRecord.photoRefLabel && (
+                          <div className="pt-3">
+                            <div className="w-7 border-t border-zinc-300 mb-2" />
+                            <p className="italic text-[9px] text-zinc-600 tabular-nums">
+                              {activeRecord.photoRefLabel}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -629,8 +691,13 @@ export function PdfCookbookStudio({
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="pt-4 text-[9.5px] text-[#121212] text-right tabular-nums">
-                      {activeRecord.photoPage}
+                    <div className="pt-4 flex items-center justify-between text-[9.5px] text-[#121212] tabular-nums">
+                      <span className="text-[8.5px] italic text-zinc-500">
+                        {(activeRecord.recipe.extraImages || []).filter(Boolean).length > 0
+                          ? `+ ${(activeRecord.recipe.extraImages || []).filter(Boolean).length} extra foto('s) op blz. ${activeRecord.photoEndPage}`
+                          : ''}
+                      </span>
+                      <span>{activeRecord.photoPage}</span>
                     </div>
                   </div>
                 )}
@@ -704,33 +771,34 @@ export function PdfCookbookStudio({
                 </div>
               </div>
             ) : (
-              /* MINIMALIST MONOCHROME VOORBLAD */
-              <div className="w-full max-w-[520px] aspect-[210/297] bg-white border border-zinc-200 shadow-sm p-10 sm:p-12 flex flex-col justify-between font-sans text-[#121212]">
-                <div className="space-y-5">
-                  <p className="text-[10px] tracking-[0.14em] text-zinc-500 uppercase">
-                    {familyName || 'Familiekookboek'}
-                  </p>
-                  <h3 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
-                    {title || 'Ons Familiekookboek'}
-                  </h3>
-                  <div className="border-t border-zinc-300 pt-4">
+              /* CLASSIC EDITORIAL FRONTPAGE WITH AAN TAFEL! LOGO */
+              <div className="w-full max-w-[520px] aspect-[210/297] bg-white border border-zinc-200 shadow-sm px-10 py-12 sm:px-14 sm:py-14 flex flex-col items-center justify-between text-center font-sans text-[#121212]">
+                <p className="text-[10px] tracking-[0.2em] text-zinc-500 uppercase">
+                  {familyName || 'Familie-editie'}
+                </p>
+
+                <div className="flex flex-col items-center space-y-6 my-auto py-6 w-full">
+                  <img
+                    src={logoFullSrc}
+                    alt="Aan Tafel! logo"
+                    className="w-60 sm:w-68 h-auto object-contain select-none"
+                  />
+
+                  <div className="w-24 border-t border-zinc-300" />
+
+                  <div className="space-y-2.5 max-w-xs">
+                    {showCustomCoverTitle && (
+                      <h3 className="text-lg font-bold tracking-tight text-[#1C3454]">
+                        {title}
+                      </h3>
+                    )}
                     {subtitle && (
-                      <p className="italic text-sm text-zinc-600 leading-relaxed max-w-sm">
+                      <p className="italic text-xs sm:text-sm text-zinc-600 leading-relaxed">
                         {subtitle}
                       </p>
                     )}
                   </div>
                 </div>
-
-                {includePhotos && firstCoverPhotoRecipe?.coverImage && (
-                  <div className="w-full aspect-[4/3] overflow-hidden my-6">
-                    <RecipeImage
-                      src={firstCoverPhotoRecipe.coverImage}
-                      alt={firstCoverPhotoRecipe.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
 
                 <p className="text-[10px] text-zinc-500 tabular-nums">
                   {selectedOrderedRecipes.length}{' '}

@@ -81,10 +81,16 @@ export const SharedCookbookView: React.FC<SharedCookbookViewProps> = ({
               className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950 whitespace-nowrap cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              Eigen Tafelboek
+              Eigen Aan Tafel!
             </button>
             <span className="text-zinc-300">|</span>
-            <span className="font-editorial text-lg font-semibold text-zinc-950 truncate">
+            <img
+              src={`${import.meta.env.BASE_URL}logo-aantafel-mark.png`}
+              alt=""
+              aria-hidden="true"
+              className="h-7 w-auto object-contain shrink-0"
+            />
+            <span className="font-editorial text-lg font-bold text-[#1C3454] truncate">
               {sharedCookbook.cookbookTitle}
             </span>
           </div>
@@ -136,74 +142,99 @@ export const SharedCookbookView: React.FC<SharedCookbookViewProps> = ({
               )}
             </div>
 
-            <div className="space-y-2 border-b border-zinc-200 pb-5">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">
-                {selectedRecipe.category} · Door {selectedRecipe.authorName}
-              </p>
-              <h1 className="font-editorial text-3xl sm:text-4xl font-semibold text-zinc-950">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4 text-[11px] uppercase tracking-[0.14em] text-zinc-500">
+                <span>{selectedRecipe.category}</span>
+                <span>Recept van {selectedRecipe.authorName}</span>
+              </div>
+              <h1 className="text-3xl sm:text-[34px] font-bold tracking-tight text-[#121212] leading-[1.12]">
                 {selectedRecipe.title}
               </h1>
-              {selectedRecipe.subtitle && (
-                <p className="text-sm text-zinc-600">{selectedRecipe.subtitle}</p>
-              )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="border-t border-zinc-300 pt-7 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
               <div className="lg:col-span-4 space-y-5">
-                <div className="text-sm space-y-1">
-                  <p className="font-semibold text-zinc-950">
-                    Voor {selectedRecipe.servings} personen
+                <div className="text-[13px] space-y-0.5 leading-snug">
+                  <p className="font-bold text-[#121212]">
+                    Voor {selectedRecipe.servings}{' '}
+                    {selectedRecipe.servings === 1 ? 'persoon' : 'personen'}
                   </p>
-                  <p className="text-zinc-600">
-                    Voorbereiden: {selectedRecipe.prepMinutes} min · Bereiden:{' '}
-                    {selectedRecipe.cookMinutes} min
-                  </p>
+                  <p className="text-zinc-600">Voorbereiden: {selectedRecipe.prepMinutes} minuten</p>
+                  <p className="text-zinc-600">Bereiden: {selectedRecipe.cookMinutes} minuten</p>
                 </div>
 
-                <ul className="space-y-2 text-sm">
-                  {selectedRecipe.ingredients.map((ing) => (
-                    <li key={ing.id} className="font-medium text-zinc-900">
-                      {[ing.amount, ing.unit, ing.name].filter(Boolean).join(' ')}
-                    </li>
-                  ))}
+                <ul className="space-y-2 text-[13.5px] leading-[1.45]">
+                  {selectedRecipe.ingredients.map((ing) => {
+                    const qty = [ing.amount, ing.unit].filter(Boolean).join(' ');
+                    const prep = (ing.preparation || '').trim();
+                    const boldBase = [qty, ing.name.trim()].filter(Boolean).join(' ');
+                    return (
+                      <li key={ing.id} className="pl-3 -indent-3">
+                        <span className="font-bold text-[#121212]">
+                          {boldBase}
+                          {prep ? ',' : ''}
+                        </span>
+                        {prep && <span className="font-normal text-zinc-700"> {prep}</span>}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
-              <div className="lg:col-span-8 space-y-6">
-                {selectedRecipe.coverImage && (
-                  <div className="rounded-xl overflow-hidden border border-zinc-200 max-h-[380px]">
-                    <RecipeImage
-                      src={selectedRecipe.coverImage}
-                      alt={selectedRecipe.title}
-                      fallbackTitle={selectedRecipe.title}
-                      className="w-full h-full object-cover"
-                    />
+              <div className="lg:col-span-8 space-y-6 text-[15px] leading-[1.7] text-[#121212]">
+                {(selectedRecipe.subtitle || selectedRecipe.story) && (
+                  <div className="italic text-[#18181B] space-y-3">
+                    {selectedRecipe.subtitle && <p>{selectedRecipe.subtitle}</p>}
+                    {selectedRecipe.story && <p>{selectedRecipe.story}</p>}
                   </div>
                 )}
 
-                {selectedRecipe.story && (
-                  <p className="text-sm italic text-zinc-700 leading-relaxed">
-                    {selectedRecipe.story}
-                  </p>
-                )}
-
-                <div className="space-y-3 text-sm text-zinc-800 leading-relaxed">
+                <ol className="space-y-4">
                   {selectedRecipe.steps.map((step, idx) => (
-                    <p key={idx}>
-                      <span className="font-semibold text-zinc-950 mr-1.5">{idx + 1}.</span>
+                    <li key={idx}>
+                      <strong className="font-bold text-[#121212] mr-1.5">{idx + 1}.</strong>
                       {step}
-                    </p>
+                    </li>
                   ))}
-                </div>
+                </ol>
 
                 {selectedRecipe.notes && (
-                  <div className="pt-4 border-t border-zinc-200 text-sm text-zinc-600">
-                    <span className="font-semibold text-zinc-900">Kooktip: </span>
-                    {selectedRecipe.notes}
+                  <div className="pt-2">
+                    <div className="w-8 border-t border-zinc-300 mb-3" />
+                    <p className="italic text-[14px] text-zinc-700">{selectedRecipe.notes}</p>
+                  </div>
+                )}
+
+                {selectedRecipe.coverImage && (
+                  <div className="pt-3">
+                    <div className="w-8 border-t border-zinc-300 mb-2.5" />
+                    <a
+                      href="#shared-photo-plate"
+                      className="text-[13px] italic text-zinc-600 hover:text-[#121212]"
+                    >
+                      Foto op bladzijde 2 ↓
+                    </a>
                   </div>
                 )}
               </div>
             </div>
+
+            {selectedRecipe.coverImage && (
+              <section id="shared-photo-plate" className="pt-8 border-t border-zinc-200 space-y-3">
+                <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-zinc-500">
+                  <span className="normal-case italic tracking-normal">Gerechtfoto</span>
+                  <span>{selectedRecipe.category}</span>
+                </div>
+                <div className="aspect-[16/10] w-full overflow-hidden border border-zinc-200 bg-zinc-100">
+                  <RecipeImage
+                    src={selectedRecipe.coverImage}
+                    alt={selectedRecipe.title}
+                    fallbackTitle={selectedRecipe.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </section>
+            )}
           </article>
         ) : (
           <>

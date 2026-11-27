@@ -38,6 +38,7 @@ function makeIngredient(overrides?: Partial<Ingredient>): Ingredient {
     name: '',
     amount: '',
     unit: '',
+    preparation: '',
     storageCategory: 'vers',
     ...overrides,
   };
@@ -208,6 +209,7 @@ export function RecipeEditorModal({
         name: i.name.trim().slice(0, 150),
         amount: i.amount.trim().slice(0, 40),
         unit: i.unit.trim().slice(0, 40),
+        preparation: (i.preparation || '').trim().slice(0, 160),
         storageCategory: i.storageCategory,
       }));
 
@@ -551,22 +553,34 @@ export function RecipeEditorModal({
               </div>
             </section>
 
-            {/* Section 3: Ingredients with Vers / Proviandkast split */}
+            {/* Section 3: Ingredients with Preparation & Vers / Proviandkast split */}
             <section className="space-y-4 pt-6 border-t border-zinc-200">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="font-editorial text-lg font-semibold text-zinc-900">
-                  03. Ingrediënten &amp; opslagcategorie
+                  03. Ingrediënten, voorbereiding &amp; opslagcategorie
                 </h3>
                 <span className="text-xs text-zinc-500">
-                  Wordt automatisch ingedeeld tussen Vers en Proviandkast voor de boodschappenlijst
+                  Opmaak in recept &amp; PDF:{' '}
+                  <strong className="font-bold text-zinc-900">3 stuks Grote uien,</strong>{' '}
+                  <span className="font-normal text-zinc-700">grof gesneden</span>
                 </span>
+              </div>
+
+              {/* Column headers on desktop */}
+              <div className="hidden md:grid md:grid-cols-[72px_84px_1.1fr_1.35fr_104px_32px] gap-2 px-0.5 text-[11px] font-medium uppercase tracking-[0.06em] text-zinc-500">
+                <span>Hoev.</span>
+                <span>Eenheid</span>
+                <span>Ingrediënt</span>
+                <span>Voorbereiding (vrije tekst)</span>
+                <span>Categorie</span>
+                <span />
               </div>
 
               <div className="space-y-2.5">
                 {ingredients.map((ing) => (
                   <div
                     key={ing.id}
-                    className="grid grid-cols-12 gap-2 items-center"
+                    className="grid grid-cols-12 md:grid-cols-[72px_84px_1.1fr_1.35fr_104px_32px] gap-2 items-center"
                   >
                     <input
                       type="text"
@@ -575,25 +589,34 @@ export function RecipeEditorModal({
                       maxLength={40}
                       placeholder="400"
                       aria-label="Hoeveelheid"
-                      className="col-span-3 sm:col-span-2 px-3 py-2 text-sm font-mono tabular-nums bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
+                      className="col-span-4 md:col-span-1 px-2.5 py-2 text-sm font-mono tabular-nums bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
                     />
                     <input
                       type="text"
                       value={ing.unit}
                       onChange={(e) => updateIngredient(ing.id, { unit: e.target.value })}
                       maxLength={40}
-                      placeholder="g / el / stuks"
+                      placeholder="g / el"
                       aria-label="Eenheid"
-                      className="col-span-3 sm:col-span-2 px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
+                      className="col-span-4 md:col-span-1 px-2.5 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
                     />
                     <input
                       type="text"
                       value={ing.name}
                       onChange={(e) => updateIngredient(ing.id, { name: e.target.value })}
                       maxLength={150}
-                      placeholder="Naam ingrediënt (bijv. olijfolie of uien)"
+                      placeholder="Ingrediënt (bijv. grote uien)"
                       aria-label="Ingrediënt"
-                      className="col-span-6 sm:col-span-4 px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
+                      className="col-span-12 md:col-span-1 px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
+                    />
+                    <input
+                      type="text"
+                      value={ing.preparation || ''}
+                      onChange={(e) => updateIngredient(ing.id, { preparation: e.target.value })}
+                      maxLength={160}
+                      placeholder="Voorbereiding (bijv. in blokjes gesneden, in reepjes)"
+                      aria-label="Voorbereiding"
+                      className="col-span-12 md:col-span-1 px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
                     />
                     <select
                       value={ing.storageCategory}
@@ -605,7 +628,7 @@ export function RecipeEditorModal({
                         )
                       }
                       aria-label="Opslagcategorie"
-                      className="col-span-10 sm:col-span-3 px-2.5 py-2 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
+                      className="col-span-10 md:col-span-1 px-2.5 py-2 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:border-[#14532D]"
                     >
                       {(Object.keys(STORAGE_CATEGORY_META) as StorageCategory[]).map((key) => (
                         <option key={key} value={key}>
@@ -620,7 +643,7 @@ export function RecipeEditorModal({
                           prev.length > 1 ? prev.filter((item) => item.id !== ing.id) : prev
                         )
                       }
-                      className="col-span-2 sm:col-span-1 h-9 flex items-center justify-center text-zinc-400 hover:text-red-600 rounded-lg transition-colors"
+                      className="col-span-2 md:col-span-1 h-9 flex items-center justify-center text-zinc-400 hover:text-red-600 rounded-lg transition-colors"
                       aria-label="Ingrediënt verwijderen"
                     >
                       <Trash2 className="w-4 h-4" />

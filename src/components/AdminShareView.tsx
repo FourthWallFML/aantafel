@@ -11,6 +11,8 @@ import {
   Link2,
   LogIn,
   LogOut,
+  Mail,
+  MessageCircle,
   Pencil,
   Plus,
   RefreshCw,
@@ -64,6 +66,9 @@ interface AdminShareViewProps {
   adminRecords: AdminRecord[];
   onSignIn: () => void;
   onSignOut: () => void;
+  onSeedRecipes?: () => Promise<void>;
+  seedingRecipes?: boolean;
+  onCreateNewRecipe?: () => void;
   onSaveProfile: (next: UserProfile) => Promise<void>;
   onEditRecipe: (recipe: Recipe) => void;
   onDeleteRecipe: (recipeId: string) => Promise<void>;
@@ -125,6 +130,9 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
   adminRecords,
   onSignIn,
   onSignOut,
+  onSeedRecipes,
+  seedingRecipes,
+  onCreateNewRecipe,
   onSaveProfile,
   onEditRecipe,
   onDeleteRecipe,
@@ -147,6 +155,7 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
   // Share link creation state
   const [shareAllowCopy, setShareAllowCopy] = useState(true);
   const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedShopping, setCopiedShopping] = useState(false);
 
@@ -218,7 +227,7 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
     }
   };
 
-  const handleCopyShoppingText = async () => {
+  const buildShoppingSummaryText = () => {
     const selectedMap = new Map(shoppingState.selectedRecipes.map((s) => [s.recipeId, s.servings]));
     const versLines: string[] = [];
     const voorraadLines: string[] = [];
@@ -244,7 +253,7 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
       }
     }
 
-    const summary = [
+    return [
       `Boodschappenlijst — ${profile.cookbookTitle}`,
       '',
       'VERS TE KOPEN:',
@@ -253,7 +262,10 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
       'IN DE VOORRAAD (CHECKEN):',
       ...(voorraadLines.length > 0 ? voorraadLines : ['(geen voorraaditems)']),
     ].join('\n');
+  };
 
+  const handleCopyShoppingText = async () => {
+    const summary = buildShoppingSummaryText();
     try {
       await navigator.clipboard.writeText(summary);
       setCopiedShopping(true);
@@ -383,7 +395,7 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
           </h1>
           <p className="text-sm text-zinc-600 max-w-2xl">
             Nodig familieleden uit, maak alleen-lezen deellinks voor je kookboek, beheer rechten en
-            notities of publiceer Tafelboek gratis op GitHub Pages.
+            notities of publiceer Aan Tafel! gratis op GitHub Pages.
           </p>
         </div>
 
@@ -480,6 +492,7 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
                   type="button"
                   disabled={shareBusy || recipes.length === 0}
                   onClick={async () => {
+                    setShareError('');
                     setShareBusy(true);
                     try {
                       await onCreateOrSyncShareLink({
@@ -487,16 +500,67 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
                         allowCopy: shareAllowCopy,
                         isActive: true,
                       });
+                    } catch {
+                      setShareError('De deellink kon niet worden opgeslagen. Probeer opnieuw.');
                     } finally {
                       setShareBusy(false);
                     }
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#14532D] hover:bg-[#166534] rounded-lg disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#14532D] hover:bg-[#166534] rounded-lg disabled:opacity-45 disabled:cursor-not-allowed whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Link2 className="w-3.5 h-3.5" />
                   {shareBusy ? 'Publiceren...' : 'Nieuwe deellink'}
                 </button>
               </div>
+
+              {!isSignedIn && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Log eerst in met Google om een echte cloud-deellink aan te maken die familie op
+                    hun eigen toestel via WhatsApp of e-mail kan openen.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onSignIn}
+                    className="px-3 py-1.5 font-medium bg-white border border-amber-300 text-amber-950 hover:bg-amber-100 rounded-lg cursor-pointer"
+                  >
+                    Inloggen met Google
+                  </button>
+                </div>
+              )}
+
+              {recipes.length === 0 && (
+                <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-700 space-y-2.5">
+                  <p>
+                    <strong>Waarom is de knop uitgeschakeld?</strong> Je kookboek bevat nog{' '}
+                    <strong>0 recepten</strong>. Voeg eerst een recept toe of laad de 4
+                    voorbeeldrecepten om een deellink te kunnen maken.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {isSignedIn && onSeedRecipes && (
+                      <button
+                        type="button"
+                        disabled={seedingRecipes}
+                        onClick={() => void onSeedRecipes()}
+                        className="px-3 py-1.5 font-medium text-white bg-[#14532D] hover:bg-[#166534] rounded-lg disabled:opacity-50 cursor-pointer"
+                      >
+                        {seedingRecipes ? 'Laden...' : 'Laad 4 voorbeeldrecepten'}
+                      </button>
+                    )}
+                    {onCreateNewRecipe && (
+                      <button
+                        type="button"
+                        onClick={onCreateNewRecipe}
+                        className="px-3 py-1.5 font-medium text-zinc-800 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
+                      >
+                        Schrijf eerste recept
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {shareError && <p className="text-xs text-red-700">{shareError}</p>}
 
               <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
                 <input
@@ -505,132 +569,178 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
                   onChange={(e) => setShareAllowCopy(e.target.checked)}
                   className="rounded border-zinc-300 text-[#14532D] focus:ring-[#14532D]"
                 />
-                Ontvangers toestaan recepten naar hun eigen Tafelboek te kopiëren
+                Ontvangers toestaan recepten naar hun eigen Aan Tafel! kookboek te kopiëren
               </label>
 
               {sharedCookbooks.length === 0 ? (
                 <div className="p-5 bg-zinc-50 border border-dashed border-zinc-200 rounded-xl text-xs text-zinc-600">
                   Nog geen actieve deellink aangemaakt. Klik op{' '}
                   <strong>Nieuwe deellink</strong> om een deelbare link voor je {recipes.length}{' '}
-                  recepten te genereren.
+                  recepten te genereren. Daarna kun je hem met één klik versturen via WhatsApp of
+                  e-mail.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {sharedCookbooks.map((share) => (
-                    <div
-                      key={share.shareCode}
-                      className="p-4 border border-zinc-200 rounded-xl bg-zinc-50/60 space-y-3"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-zinc-950">
-                            {share.cookbookTitle}
-                          </p>
-                          <p className="text-xs text-zinc-500 tabular-nums">
-                            {share.recipeCount} recepten ·{' '}
-                            {share.isActive ? 'Actief' : 'Gepauzeerd'} ·{' '}
-                            {share.allowCopy ? 'Kopiëren toegestaan' : 'Alleen lezen'}
-                          </p>
+                  {sharedCookbooks.map((share) => {
+                    const shareUrl = buildShareUrl(share.shareCode);
+                    const shareText = `Bekijk ons familiekookboek "${share.cookbookTitle}" (${share.recipeCount} recepten):\n${shareUrl}`;
+                    const whatsappHref = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+                    const emailHref = `mailto:?subject=${encodeURIComponent(
+                      `Familiekookboek: ${share.cookbookTitle}`
+                    )}&body=${encodeURIComponent(shareText)}`;
+
+                    return (
+                      <div
+                        key={share.shareCode}
+                        className="p-4 border border-zinc-200 rounded-xl bg-zinc-50/60 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-zinc-950">
+                              {share.cookbookTitle}
+                            </p>
+                            <p className="text-xs text-zinc-500 tabular-nums">
+                              {share.recipeCount} recepten ·{' '}
+                              {share.isActive ? 'Actief' : 'Gepauzeerd'} ·{' '}
+                              {share.allowCopy ? 'Kopiëren toegestaan' : 'Alleen lezen'}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <a
+                              href={whatsappHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-[#14532D] hover:bg-[#166534] rounded-lg"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              WhatsApp
+                            </a>
+                            <a
+                              href={emailHref}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-800 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                              E-mail
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyShareUrl(share.shareCode)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-800 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
+                            >
+                              {copiedCode === share.shareCode ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-[#14532D]" />
+                                  Gekopieerd
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  Kopieer
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onPreviewShareLink(share)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
+                              title="Bekijk als bezoeker"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void onCreateOrSyncShareLink({
+                                  existingShare: share,
+                                  recipeIds: recipes.slice(0, 30).map((r) => r.id),
+                                  allowCopy: share.allowCopy,
+                                  isActive: share.isActive,
+                                })
+                              }
+                              className="p-1.5 text-zinc-600 hover:text-zinc-950 bg-white border border-zinc-200 rounded-lg cursor-pointer"
+                              title="Synchroniseer nieuwste recepten"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void onToggleShareActive(share)}
+                              className="px-2.5 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
+                            >
+                              {share.isActive ? 'Pauzeer' : 'Activeer'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void onDeleteShareLink(share.shareCode)}
+                              className="p-1.5 text-zinc-400 hover:text-red-700 cursor-pointer"
+                              title="Verwijder deellink"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => void handleCopyShareUrl(share.shareCode)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-800 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
-                          >
-                            {copiedCode === share.shareCode ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-[#14532D]" />
-                                Gekopieerd
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3.5 h-3.5" />
-                                Kopieer link
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onPreviewShareLink(share)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
-                            title="Bekijk als bezoeker"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Open
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void onCreateOrSyncShareLink({
-                                existingShare: share,
-                                recipeIds: recipes.slice(0, 30).map((r) => r.id),
-                                allowCopy: share.allowCopy,
-                                isActive: share.isActive,
-                              })
-                            }
-                            className="p-1.5 text-zinc-600 hover:text-zinc-950 bg-white border border-zinc-200 rounded-lg cursor-pointer"
-                            title="Synchroniseer nieuwste recepten"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void onToggleShareActive(share)}
-                            className="px-2.5 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg cursor-pointer"
-                          >
-                            {share.isActive ? 'Pauzeer' : 'Activeer'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void onDeleteShareLink(share.shareCode)}
-                            className="p-1.5 text-zinc-400 hover:text-red-700 cursor-pointer"
-                            title="Verwijder deellink"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="px-3 py-1.5 bg-white border border-zinc-200 rounded-lg font-mono text-[11px] text-zinc-600 truncate">
+                          {shareUrl}
                         </div>
                       </div>
-
-                      <div className="px-3 py-1.5 bg-white border border-zinc-200 rounded-lg font-mono text-[11px] text-zinc-600 truncate">
-                        {buildShareUrl(share.shareCode)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
 
-            {/* Quick WhatsApp / Text Shopping List Share */}
-            <section className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Quick WhatsApp / E-mail / Text Shopping List Share */}
+            <section className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-4">
               <div className="space-y-1">
                 <h2 className="font-editorial text-lg font-semibold text-zinc-950">
                   Boodschappenlijst direct doorsturen
                 </h2>
                 <p className="text-xs text-zinc-500">
-                  Kopieer je actieve lijst ({shoppingState.selectedRecipes.length} gerechten +{' '}
-                  {shoppingState.manualItems.length} losse items), netjes gesplitst in Vers en
-                  Voorraad, om meteen in WhatsApp of e-mail te plakken.
+                  Verstuur je actieve lijst ({shoppingState.selectedRecipes.length} gerechten +{' '}
+                  {shoppingState.manualItems.length} losse items), opgesplitst in Vers en Voorraad,
+                  rechtstreeks via WhatsApp of e-mail.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void handleCopyShoppingText()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-zinc-900 bg-zinc-100 hover:bg-zinc-200 rounded-lg whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                {copiedShopping ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-[#14532D]" />
-                    Gekopieerd voor WhatsApp
-                  </>
-                ) : (
-                  <>
-                    <ClipboardList className="w-3.5 h-3.5" />
-                    Kopieer boodschappenlijst
-                  </>
-                )}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(buildShoppingSummaryText())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-[#14532D] hover:bg-[#166534] rounded-lg whitespace-nowrap"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  Deel via WhatsApp
+                </a>
+                <a
+                  href={`mailto:?subject=${encodeURIComponent(
+                    `Boodschappenlijst — ${profile.cookbookTitle}`
+                  )}&body=${encodeURIComponent(buildShoppingSummaryText())}`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-zinc-800 bg-zinc-100 hover:bg-zinc-200 rounded-lg whitespace-nowrap"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  Deel via e-mail
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyShoppingText()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-zinc-800 bg-zinc-100 hover:bg-zinc-200 rounded-lg whitespace-nowrap cursor-pointer"
+                >
+                  {copiedShopping ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-[#14532D]" />
+                      Gekopieerd
+                    </>
+                  ) : (
+                    <>
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      Kopieer tekst
+                    </>
+                  )}
+                </button>
+              </div>
             </section>
           </div>
 
@@ -1240,7 +1350,7 @@ export const AdminShareView: React.FC<AdminShareViewProps> = ({
                 Automatisch bouwen met GitHub Pages + Actions
               </h2>
               <p className="text-xs text-zinc-600 leading-relaxed">
-                Omdat de volledige Tafelboek-app met React, Vite en Firebase werkt, kan GitHub hem
+                Omdat de volledige Aan Tafel!-app met React, Vite en Firebase werkt, kan GitHub hem
                 gratis voor je compileren naar een statische PWA (inclusief automatische{' '}
                 <code className="font-mono">manifest.webmanifest</code> en{' '}
                 <code className="font-mono">sw.js</code>).
