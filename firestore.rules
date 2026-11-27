@@ -1,0 +1,573 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // =========================================================================
+    // Global Safety Net (Default Deny)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Reusable Hardened Global Primitives
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'adamske@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() >= 3 && email.size() <= 160 && email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['displayName', 'cookbookTitle', 'cookbookSubtitle', 'familyName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['displayName', 'cookbookTitle', 'cookbookSubtitle', 'familyName', 'ingredientMemory', 'createdAt', 'updatedAt'])
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.cookbookTitle is string && data.cookbookTitle.size() >= 1 && data.cookbookTitle.size() <= 120
+        && data.cookbookSubtitle is string && data.cookbookSubtitle.size() <= 200
+        && data.familyName is string && data.familyName.size() <= 100
+        && (!('ingredientMemory' in data) || (data.ingredientMemory is map && data.ingredientMemory.size() <= 300))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data, adminUid) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.uid == adminUid
+        && isValidEmail(data.email)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && isValidId(data.grantedBy)
+        && data.grantedBy == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    function isValidFamilyMember(data) {
+      return data.keys().hasAll([
+          'ownerId', 'memberName', 'memberEmail', 'role', 'status',
+          'canViewShoppingList', 'note', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'memberName', 'memberEmail', 'role', 'status',
+          'canViewShoppingList', 'note', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 100
+        && isValidEmail(data.memberEmail)
+        && data.role in ['admin', 'editor', 'viewer']
+        && data.status in ['active', 'pending', 'revoked']
+        && data.canViewShoppingList is bool
+        && data.note is string && data.note.size() <= 240
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRecipeCategory(cat) {
+      return cat in ['Hoofdgerecht', 'Voorgerecht', 'Soep', 'Bijgerecht', 'Dessert', 'Ontbijt & Brunch', 'Gebak'];
+    }
+
+    function isValidIngredientItem(item) {
+      return item is map
+        && item.keys().hasAll(['id', 'name', 'amount', 'unit', 'storageCategory'])
+        && item.keys().hasOnly(['id', 'name', 'amount', 'unit', 'storageCategory'])
+        && item.id is string && item.id.size() >= 1 && item.id.size() <= 64
+        && item.name is string && item.name.size() >= 1 && item.name.size() <= 150
+        && (item.amount is number || (item.amount is string && item.amount.size() <= 40))
+        && item.unit is string && item.unit.size() <= 40
+        && item.storageCategory in ['vers', 'proviandkast', 'diepvries', 'bakkerij'];
+    }
+
+    function isValidSharedRecipeSnapshot(item) {
+      return item is map
+        && item.keys().hasAll([
+          'id', 'title', 'subtitle', 'story', 'category',
+          'prepMinutes', 'cookMinutes', 'servings', 'authorName',
+          'coverImage', 'ingredients', 'steps', 'notes'
+        ])
+        && item.keys().hasOnly([
+          'id', 'title', 'subtitle', 'story', 'category',
+          'prepMinutes', 'cookMinutes', 'servings', 'authorName',
+          'coverImage', 'ingredients', 'steps', 'notes'
+        ])
+        && isValidId(item.id)
+        && item.title is string && item.title.size() >= 1 && item.title.size() <= 140
+        && item.subtitle is string && item.subtitle.size() <= 220
+        && item.story is string && item.story.size() <= 3000
+        && isValidRecipeCategory(item.category)
+        && item.prepMinutes is number && item.prepMinutes >= 0 && item.prepMinutes <= 1440
+        && item.cookMinutes is number && item.cookMinutes >= 0 && item.cookMinutes <= 2880
+        && item.servings is number && item.servings >= 1 && item.servings <= 100
+        && item.authorName is string && item.authorName.size() >= 1 && item.authorName.size() <= 100
+        && item.coverImage is string && item.coverImage.size() <= 200000
+        && item.ingredients is list && item.ingredients.size() <= 60
+        && (item.ingredients.size() == 0 || isValidIngredientItem(item.ingredients[0]))
+        && item.steps is list && item.steps.size() <= 40
+        && (item.steps.size() == 0 || (item.steps[0] is string && item.steps[0].size() >= 1 && item.steps[0].size() <= 1500))
+        && item.notes is string && item.notes.size() <= 2000;
+    }
+
+    function isValidSharedCookbook(data, shareCode) {
+      return data.keys().hasAll([
+          'ownerId', 'shareCode', 'cookbookTitle', 'cookbookSubtitle', 'familyName',
+          'sharedByName', 'isActive', 'allowCopy', 'recipeCount', 'recipesSnapshot',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'shareCode', 'cookbookTitle', 'cookbookSubtitle', 'familyName',
+          'sharedByName', 'isActive', 'allowCopy', 'recipeCount', 'recipesSnapshot',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && isValidId(data.shareCode)
+        && data.shareCode == shareCode
+        && data.shareCode.size() >= 8 && data.shareCode.size() <= 64
+        && data.cookbookTitle is string && data.cookbookTitle.size() >= 1 && data.cookbookTitle.size() <= 120
+        && data.cookbookSubtitle is string && data.cookbookSubtitle.size() <= 200
+        && data.familyName is string && data.familyName.size() <= 100
+        && data.sharedByName is string && data.sharedByName.size() >= 1 && data.sharedByName.size() <= 100
+        && data.isActive is bool
+        && data.allowCopy is bool
+        && data.recipeCount is number && data.recipeCount >= 0 && data.recipeCount <= 30
+        && data.recipesSnapshot is list && data.recipesSnapshot.size() <= 30
+        && data.recipeCount == data.recipesSnapshot.size()
+        && (data.recipesSnapshot.size() == 0 || isValidSharedRecipeSnapshot(data.recipesSnapshot[0]))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRecipe(data) {
+      return data.keys().hasAll([
+          'ownerId', 'title', 'subtitle', 'story', 'category',
+          'prepMinutes', 'cookMinutes', 'servings', 'authorName',
+          'coverImage', 'extraImages', 'videoUrl', 'videoTitle', 'videoLocalId',
+          'ingredients', 'steps', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'title', 'subtitle', 'story', 'category',
+          'prepMinutes', 'cookMinutes', 'servings', 'authorName',
+          'coverImage', 'extraImages', 'videoUrl', 'videoTitle', 'videoLocalId',
+          'ingredients', 'steps', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.subtitle is string && data.subtitle.size() <= 220
+        && data.story is string && data.story.size() <= 3000
+        && isValidRecipeCategory(data.category)
+        && data.prepMinutes is number && data.prepMinutes >= 0 && data.prepMinutes <= 1440
+        && data.cookMinutes is number && data.cookMinutes >= 0 && data.cookMinutes <= 2880
+        && data.servings is number && data.servings >= 1 && data.servings <= 100
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100
+        && data.coverImage is string && data.coverImage.size() <= 350000
+        && data.extraImages is list && data.extraImages.size() <= 3
+        && (data.extraImages.size() == 0 || (data.extraImages[0] is string && data.extraImages[0].size() <= 250000))
+        && data.videoUrl is string && data.videoUrl.size() <= 600
+        && data.videoTitle is string && data.videoTitle.size() <= 160
+        && data.videoLocalId is string && data.videoLocalId.size() <= 128
+        && data.ingredients is list && data.ingredients.size() <= 60
+        && (data.ingredients.size() == 0 || isValidIngredientItem(data.ingredients[0]))
+        && data.steps is list && data.steps.size() <= 40
+        && (data.steps.size() == 0 || (data.steps[0] is string && data.steps[0].size() >= 1 && data.steps[0].size() <= 1500))
+        && data.notes is string && data.notes.size() <= 2000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidComment(data, recipeId) {
+      return data.keys().hasAll(['recipeId', 'ownerId', 'authorName', 'text', 'createdAt'])
+        && data.keys().hasOnly(['recipeId', 'ownerId', 'authorName', 'text', 'createdAt'])
+        && isValidId(data.recipeId)
+        && data.recipeId == recipeId
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 1500
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSelectedRecipeItem(item) {
+      return item is map
+        && item.keys().hasAll(['recipeId', 'servings'])
+        && item.keys().hasOnly(['recipeId', 'servings'])
+        && isValidId(item.recipeId)
+        && item.servings is number && item.servings >= 1 && item.servings <= 100;
+    }
+
+    function isValidManualShoppingItem(item) {
+      return item is map
+        && item.keys().hasAll(['id', 'name', 'amount', 'unit', 'storageCategory', 'checked'])
+        && item.keys().hasOnly(['id', 'name', 'amount', 'unit', 'storageCategory', 'checked'])
+        && item.id is string && item.id.size() >= 1 && item.id.size() <= 64
+        && item.name is string && item.name.size() >= 1 && item.name.size() <= 150
+        && item.amount is string && item.amount.size() <= 40
+        && item.unit is string && item.unit.size() <= 40
+        && item.storageCategory in ['vers', 'proviandkast', 'diepvries', 'bakkerij']
+        && item.checked is bool;
+    }
+
+    function isValidShoppingList(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'selectedRecipes', 'checkedKeys', 'manualItems', 'categoryOverrides', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'title', 'selectedRecipes', 'checkedKeys', 'manualItems', 'categoryOverrides', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.selectedRecipes is list && data.selectedRecipes.size() <= 30
+        && (data.selectedRecipes.size() == 0 || isValidSelectedRecipeItem(data.selectedRecipes[0]))
+        && data.checkedKeys is list && data.checkedKeys.size() <= 200
+        && (data.checkedKeys.size() == 0 || (data.checkedKeys[0] is string && data.checkedKeys[0].size() <= 200))
+        && data.manualItems is list && data.manualItems.size() <= 60
+        && (data.manualItems.size() == 0 || isValidManualShoppingItem(data.manualItems[0]))
+        && data.categoryOverrides is map && data.categoryOverrides.size() <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRecurringItem(data) {
+      return data.keys().hasAll([
+          'ownerId', 'name', 'defaultAmount', 'defaultUnit', 'storageCategory',
+          'averageIntervalDays', 'lastPurchasedAtMs', 'purchaseDatesMs', 'notes',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'name', 'defaultAmount', 'defaultUnit', 'storageCategory',
+          'averageIntervalDays', 'lastPurchasedAtMs', 'purchaseDatesMs', 'notes',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 150
+        && data.defaultAmount is string && data.defaultAmount.size() <= 40
+        && data.defaultUnit is string && data.defaultUnit.size() <= 40
+        && data.storageCategory in ['vers', 'proviandkast', 'diepvries', 'bakkerij']
+        && data.averageIntervalDays is number && data.averageIntervalDays >= 1 && data.averageIntervalDays <= 365
+        && data.lastPurchasedAtMs is number && data.lastPurchasedAtMs >= 0
+        && data.purchaseDatesMs is list && data.purchaseDatesMs.size() <= 100
+        && (data.purchaseDatesMs.size() == 0 || data.purchaseDatesMs[0] is number)
+        && data.notes is string && data.notes.size() <= 300
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection: /admins/{adminUid}
+    // =========================================================================
+    match /admins/{adminUid} {
+      allow get: if isValidId(adminUid) && (isOwner(adminUid) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isVerifiedUser()
+        && isValidId(adminUid)
+        && isValidAdminRecord(incoming(), adminUid)
+        && isAdmin()
+        && incoming().createdAt == request.time;
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser()
+        && isValidId(adminUid)
+        && isAdmin()
+        && adminUid != request.auth.uid;
+    }
+
+    // =========================================================================
+    // Collection: /familyMembers/{memberId}
+    // =========================================================================
+    match /familyMembers/{memberId} {
+      allow get: if isSignedIn()
+        && isValidId(memberId)
+        && (
+          existing().ownerId == request.auth.uid
+          || isAdmin()
+          || (isVerifiedUser() && existing().memberEmail == request.auth.token.email)
+        );
+
+      allow list: if isSignedIn()
+        && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(memberId)
+        && isValidFamilyMember(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(memberId)
+        && isValidFamilyMember(incoming())
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && incoming().ownerId == existing().ownerId
+        && incoming().memberEmail == existing().memberEmail
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().status != 'revoked' || isAdmin())
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'memberName', 'role', 'status', 'canViewShoppingList', 'note', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(memberId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // =========================================================================
+    // Collection: /sharedCookbooks/{shareCode}
+    // =========================================================================
+    match /sharedCookbooks/{shareCode} {
+      allow get: if isValidId(shareCode)
+        && resource != null
+        && (
+          existing().isActive == true
+          || (isSignedIn() && existing().ownerId == request.auth.uid)
+          || isAdmin()
+        );
+
+      allow list: if isSignedIn()
+        && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(shareCode)
+        && isValidSharedCookbook(incoming(), shareCode)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(shareCode)
+        && isValidSharedCookbook(incoming(), shareCode)
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && incoming().ownerId == existing().ownerId
+        && incoming().shareCode == existing().shareCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'cookbookTitle', 'cookbookSubtitle', 'familyName', 'sharedByName',
+            'isActive', 'allowCopy', 'recipeCount', 'recipesSnapshot', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(shareCode)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // =========================================================================
+    // Collection: /users/{userId}
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && (isOwner(userId) || isAdmin())
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'cookbookTitle', 'cookbookSubtitle', 'familyName', 'ingredientMemory', 'updatedAt'
+          ])
+        );
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Collection: /recipes/{recipeId}
+    // =========================================================================
+    match /recipes/{recipeId} {
+      allow get: if isSignedIn()
+        && isValidId(recipeId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+
+      allow list: if isSignedIn()
+        && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(recipeId)
+        && isValidRecipe(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(recipeId)
+        && isValidRecipe(incoming())
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'subtitle', 'story', 'category',
+            'prepMinutes', 'cookMinutes', 'servings', 'authorName',
+            'coverImage', 'extraImages', 'videoUrl', 'videoTitle', 'videoLocalId',
+            'ingredients', 'steps', 'notes', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(recipeId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+
+      // =======================================================================
+      // Subcollection: /recipes/{recipeId}/comments/{commentId}
+      // =======================================================================
+      match /comments/{commentId} {
+        allow get: if isSignedIn()
+          && isValidId(recipeId)
+          && isValidId(commentId)
+          && (
+            (existing().ownerId == request.auth.uid && get(/databases/$(database)/documents/recipes/$(recipeId)).data.ownerId == request.auth.uid)
+            || isAdmin()
+          );
+
+        allow list: if isSignedIn()
+          && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+        allow create: if isVerifiedUser()
+          && isValidId(recipeId)
+          && isValidId(commentId)
+          && isValidComment(incoming(), recipeId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/recipes/$(recipeId))
+          && (get(/databases/$(database)/documents/recipes/$(recipeId)).data.ownerId == request.auth.uid || isAdmin());
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser()
+          && isValidId(recipeId)
+          && isValidId(commentId)
+          && (
+            (existing().ownerId == request.auth.uid && get(/databases/$(database)/documents/recipes/$(recipeId)).data.ownerId == request.auth.uid)
+            || isAdmin()
+          );
+      }
+    }
+
+    // =========================================================================
+    // Collection: /shoppingLists/{listId}
+    // =========================================================================
+    match /shoppingLists/{listId} {
+      allow get: if isSignedIn()
+        && isValidId(listId)
+        && (listId == request.auth.uid || (resource != null && existing().ownerId == request.auth.uid) || isAdmin());
+
+      allow list: if isSignedIn()
+        && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(listId)
+        && isValidShoppingList(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(listId)
+        && isValidShoppingList(incoming())
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'selectedRecipes', 'checkedKeys', 'manualItems', 'categoryOverrides', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(listId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // =========================================================================
+    // Collection: /recurringItems/{itemId}
+    // =========================================================================
+    match /recurringItems/{itemId} {
+      allow get: if isSignedIn()
+        && isValidId(itemId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+
+      allow list: if isSignedIn()
+        && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(itemId)
+        && isValidRecurringItem(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(itemId)
+        && isValidRecurringItem(incoming())
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'defaultAmount', 'defaultUnit', 'storageCategory',
+            'averageIntervalDays', 'lastPurchasedAtMs', 'purchaseDatesMs', 'notes', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(itemId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}

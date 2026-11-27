@@ -24,11 +24,13 @@ jobs:
       - name: Node.js instellen
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: "npm"
+          node-version: 24
+
+      - name: GitHub Pages configureren
+        uses: actions/configure-pages@v5
 
       - name: Afhankelijkheden installeren
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Bouwen voor GitHub Pages
         env:

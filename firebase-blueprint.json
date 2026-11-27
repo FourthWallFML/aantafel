@@ -1,0 +1,604 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Persoonlijke kookboek-instellingen en aangeleerd ingrediënt-geheugen (vers vs. proviandkast) van een gebruiker.",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Weergavenaam van de gebruiker."
+        },
+        "cookbookTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Titel van het afdrukbare familiekookboek."
+        },
+        "cookbookSubtitle": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Ondertitel of opdracht voor het voorblad van het kookboek."
+        },
+        "familyName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Familienaam voor de omslag van het kookboek."
+        },
+        "ingredientMemory": {
+          "type": "object",
+          "description": "Persoonlijk geheugen per genormaliseerd ingrediënt of de gebruiker dit als vers of proviandkast indeelt."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Laatste wijzigingstijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "displayName",
+        "cookbookTitle",
+        "cookbookSubtitle",
+        "familyName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Geregistreerde beheerder (RBAC) voor de beheersmodule van Tafelboek.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase UID van de beheerder."
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "E-mailadres van de beheerder (strikt beschermd PII)."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Naam van de beheerder."
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de beheerder die de rechten toekende."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "grantedBy",
+        "createdAt"
+      ]
+    },
+    "FamilyMember": {
+      "title": "FamilyMember",
+      "description": "Uitgenodigd familielid met rol (admin, editor, viewer) en deelrechten binnen de beheersmodule.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de eigenaar van het familiekookboek."
+        },
+        "memberName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Naam van het familielid (bijv. Oma Greet, Pieter)."
+        },
+        "memberEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "E-mailadres van het familielid (PII, enkel zichtbaar voor eigenaar, admin en lid zelf)."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "editor", "viewer"],
+          "description": "Rol van het familielid in de kookboek-omgeving."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "pending", "revoked"],
+          "description": "Status van de familie-uitnodiging."
+        },
+        "canViewShoppingList": {
+          "type": "boolean",
+          "description": "Geeft aan of dit familielid de boodschappenlijst mag meelezen."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Optionele beheernotitie."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Laatste wijzigingstijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "ownerId",
+        "memberName",
+        "memberEmail",
+        "role",
+        "status",
+        "canViewShoppingList",
+        "note",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SharedCookbook": {
+      "title": "SharedCookbook",
+      "description": "Alleen-lezen deellink met een opgeschoonde momentopname van geselecteerde recepten zonder privé-PII.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de eigenaar die het kookboek deelt."
+        },
+        "shareCode": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unieke, moeilijk te raden deelcode in de URL (?share=...)."
+        },
+        "cookbookTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Titel van het gedeelde kookboek."
+        },
+        "cookbookSubtitle": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Ondertitel van het gedeelde kookboek."
+        },
+        "familyName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Familienaam of editienaam."
+        },
+        "sharedByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Weergavenaam van de deler."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Of de deellink momenteel actief is."
+        },
+        "allowCopy": {
+          "type": "boolean",
+          "description": "Of ontvangers recepten naar hun eigen kookboek mogen kopiëren."
+        },
+        "recipeCount": {
+          "type": "number",
+          "description": "Aantal recepten in deze gedeelde selectie (0-30)."
+        },
+        "recipesSnapshot": {
+          "type": "array",
+          "description": "Opgeschoonde momentopname van maximaal 30 gedeelde recepten (zonder privé-e-mails of video's)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Laatste synchronisatie (serverTimestamp)."
+        }
+      },
+      "required": [
+        "ownerId",
+        "shareCode",
+        "cookbookTitle",
+        "cookbookSubtitle",
+        "familyName",
+        "sharedByName",
+        "isActive",
+        "allowCopy",
+        "recipeCount",
+        "recipesSnapshot",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "Een familierecept met foto's, verhaal, ingrediënten met opslagcategorie, bereidingsstappen, notities en optionele video.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de eigenaar van het recept."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Titel van het gerecht."
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 220,
+          "description": "Korte samenvatting of bijtitel."
+        },
+        "story": {
+          "type": "string",
+          "maxLength": 3000,
+          "description": "Het familieverhaal of herkomst van het recept."
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Hoofdgerecht",
+            "Voorgerecht",
+            "Soep",
+            "Bijgerecht",
+            "Dessert",
+            "Ontbijt & Brunch",
+            "Gebak"
+          ],
+          "description": "Hoofdstukcategorie in het kookboek."
+        },
+        "prepMinutes": {
+          "type": "number",
+          "description": "Voorbereidingstijd in minuten."
+        },
+        "cookMinutes": {
+          "type": "number",
+          "description": "Kook- of baktijd in minuten."
+        },
+        "servings": {
+          "type": "number",
+          "description": "Standaard aantal personen."
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Naam van het familielid dat het recept heeft geschreven."
+        },
+        "coverImage": {
+          "type": "string",
+          "maxLength": 350000,
+          "description": "Hoofdfoto van het gerecht (URL of gecomprimeerde JPEG data-URL)."
+        },
+        "extraImages": {
+          "type": "array",
+          "description": "Maximaal 3 extra foto's van het gerecht of de bereiding."
+        },
+        "videoUrl": {
+          "type": "string",
+          "maxLength": 600,
+          "description": "Optionele YouTube-, Vimeo- of directe video-URL (wordt uitgesloten van PDF-export)."
+        },
+        "videoTitle": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Optionele titel bij de kookvideo."
+        },
+        "videoLocalId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Optionele IndexedDB-sleutel voor een lokaal opgeladen videobestand."
+        },
+        "ingredients": {
+          "type": "array",
+          "description": "Gestructureerde ingrediëntenlijst met hoeveelheid, eenheid en opslagcategorie (vers, proviandkast, diepvries, bakkerij)."
+        },
+        "steps": {
+          "type": "array",
+          "description": "Genummerde bereidingsstappen."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Extra kooktips of variaties van de auteur."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Laatste wijzigingstijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "subtitle",
+        "story",
+        "category",
+        "prepMinutes",
+        "cookMinutes",
+        "servings",
+        "authorName",
+        "coverImage",
+        "extraImages",
+        "videoUrl",
+        "videoTitle",
+        "videoLocalId",
+        "ingredients",
+        "steps",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RecipeComment": {
+      "title": "RecipeComment",
+      "description": "Een familienotitie of reactie onder een recept.",
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "ID van het bijbehorende recept."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de eigenaar van de notitie."
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Naam van de schrijver (bijv. Oma, Papa, Lotte)."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500,
+          "description": "Inhoud van de opmerking of kooktip."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "recipeId",
+        "ownerId",
+        "authorName",
+        "text",
+        "createdAt"
+      ]
+    },
+    "ShoppingList": {
+      "title": "ShoppingList",
+      "description": "Actieve weekselectie en boodschappenlijst met scheiding tussen vers, proviandkast, diepvries en bakkerij.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de eigenaar van de boodschappenlijst."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Naam van de boodschappenlijst."
+        },
+        "selectedRecipes": {
+          "type": "array",
+          "description": "Geselecteerde recepten met aangepast aantal personen."
+        },
+        "checkedKeys": {
+          "type": "array",
+          "description": "Afgevinkte ingrediënten (al in huis of in winkelmandje)."
+        },
+        "manualItems": {
+          "type": "array",
+          "description": "Handmatig toegevoegde losse boodschappen."
+        },
+        "categoryOverrides": {
+          "type": "object",
+          "description": "Handmatige herindeling van ingrediënten tussen vers en proviandkast."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Laatste wijzigingstijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "selectedRecipes",
+        "checkedKeys",
+        "manualItems",
+        "categoryOverrides",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RecurringItem": {
+      "title": "RecurringItem",
+      "description": "Terugkerend boodschappenproduct (bijv. confituur, koffie) met aankoopgeschiedenis en gemiddelde koopfrecquentie in dagen.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID van de eigenaar."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150,
+          "description": "Naam van het terugkerende product (bijv. Confituur)."
+        },
+        "defaultAmount": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Standaard aantal (bijv. 1)."
+        },
+        "defaultUnit": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Standaard eenheid (bijv. pot, pak, fles)."
+        },
+        "storageCategory": {
+          "type": "string",
+          "enum": ["vers", "proviandkast", "diepvries", "bakkerij"],
+          "description": "Opslagcategorie van het product."
+        },
+        "averageIntervalDays": {
+          "type": "number",
+          "description": "Gemiddeld aantal dagen tussen twee aankopen (1-365)."
+        },
+        "lastPurchasedAtMs": {
+          "type": "number",
+          "description": "Epoch-tijdstip (ms) van de meest recente aankoop."
+        },
+        "purchaseDatesMs": {
+          "type": "array",
+          "description": "Lijst met eerdere aankoopdata in ms (max 100) om het werkelijke gemiddelde te berekenen."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Optionele merk- of winkelnotitie."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Aanmaaktijdstip (serverTimestamp)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Laatste wijzigingstijdstip (serverTimestamp)."
+        }
+      },
+      "required": [
+        "ownerId",
+        "name",
+        "defaultAmount",
+        "defaultUnit",
+        "storageCategory",
+        "averageIntervalDays",
+        "lastPurchasedAtMs",
+        "purchaseDatesMs",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Privé kookboekprofiel en ingrediënt-voorkeuren van een gebruiker."
+    },
+    "/admins/{adminUid}": {
+      "schema": {
+        "$ref": "#/entities/AdminRecord"
+      },
+      "description": "Geregistreerde beheerders (RBAC) naast de bootstrapped admin."
+    },
+    "/familyMembers/{memberId}": {
+      "schema": {
+        "$ref": "#/entities/FamilyMember"
+      },
+      "description": "Uitgenodigde familieleden met rollen en deelrechten."
+    },
+    "/sharedCookbooks/{shareCode}": {
+      "schema": {
+        "$ref": "#/entities/SharedCookbook"
+      },
+      "description": "Alleen-lezen deellinks met opgeschoonde recept-momentopnames zonder PII."
+    },
+    "/recipes/{recipeId}": {
+      "schema": {
+        "$ref": "#/entities/Recipe"
+      },
+      "description": "Familierecepten beheerd door de ingelogde gebruiker."
+    },
+    "/recipes/{recipeId}/comments/{commentId}": {
+      "schema": {
+        "$ref": "#/entities/RecipeComment"
+      },
+      "description": "Familienotities en kooktips gekoppeld aan een recept."
+    },
+    "/shoppingLists/{listId}": {
+      "schema": {
+        "$ref": "#/entities/ShoppingList"
+      },
+      "description": "Opgeslagen receptselecties en opgesplitste boodschappenlijsten."
+    },
+    "/recurringItems/{itemId}": {
+      "schema": {
+        "$ref": "#/entities/RecurringItem"
+      },
+      "description": "Terugkerende boodschappen met aankoopgeschiedenis en gemiddelde cyclus."
+    }
+  }
+}

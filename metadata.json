@@ -1,0 +1,6 @@
+{
+  "name": "Tafelboek",
+  "description": "Familiekookboek met foto's, notities, kookvideo's, afdrukbaar PDF-kookboek en een slimme boodschappenlijst opgesplitst in verse producten en proviandkast.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
